@@ -246,6 +246,28 @@ def test_direct_route_input_escalates_to_critical() -> None:
     assert sev["PY-SEC-001"] is Severity.CRITICAL
 
 
+def test_fastapi_typed_scalar_params_are_not_sources() -> None:
+    pf = parse_python_file("app/files.py", _src('''
+        from fastapi import APIRouter
+        from fastapi.responses import FileResponse
+
+        router = APIRouter()
+
+
+        @router.get("/invoices/{invoice_id}.pdf")
+        def invoice_pdf(invoice_id: int) -> FileResponse:
+            return FileResponse(f"/srv/invoices/{invoice_id}.pdf")
+
+
+        @router.get("/raw/{name}")
+        def raw(name: str) -> FileResponse:
+            return FileResponse(f"/srv/raw/{name}")
+    '''))
+    flagged = {f.symbol for f in pf.findings if f.rule_id == "PY-SEC-009"}
+    assert flagged == {"raw"}
+    assert pf.symbols["invoice_pdf"].sources == []
+
+
 def test_misc_security_rules() -> None:
     pf = parse_python_file("app/misc.py", _src('''
         import hashlib

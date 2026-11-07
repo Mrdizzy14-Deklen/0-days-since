@@ -45,3 +45,7 @@ target-version = "py311"
 select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 # str-Enum mixins are deliberate (SQLAlchemy/pydantic interop); nested ifs kept for readability
 ignore = ["UP017", "UP042", "SIM102", "SIM114"]
+
+[tool.ruff.lint.per-file-ignores]
+# embeds the demo repository's source code verbatim (incl. deliberately long vulnerable lines)
+"app/demo/scenario.py" = ["E501"]

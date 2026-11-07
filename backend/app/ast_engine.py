@@ -183,6 +183,10 @@ DJANGO_VIEW_METHODS = frozenset({"get", "post", "put", "patch", "delete", "head"
 TASK_DECORATORS = frozenset({"task", "shared_task", "periodic_task", "actor"})
 CLI_DECORATORS = frozenset({"command", "group"})
 DEPENDS_NAMES = frozenset({"Depends", "Security"})
+# FastAPI parses & validates these parameter types before the handler runs.
+FASTAPI_COERCED_TYPES = frozenset({"int", "float", "bool", "UUID", "uuid", "date", "datetime",
+                                   "time", "timedelta", "Decimal", "PositiveInt",
+                                   "NonNegativeInt", "conint", "EmailStr"})
 
 SECRET_NAME_RE = re.compile(
     r"(passw(or)?d|passwd|pwd|secret|api[_-]?key|apikey|access[_-]?key|auth[_-]?token|"
@@ -1448,6 +1452,8 @@ class _FileParser:
                 if ann and ann[-1] in {"Request", "WebSocket", "HttpRequest", "Session",
                                        "AsyncSession", "BackgroundTasks", "Response"}:
                     continue
+                if sym.framework == "fastapi" and ann and ann[-1] in FASTAPI_COERCED_TYPES:
+                    continue  # FastAPI validates/coerces these: no injection payload possible
                 origin = f"source:route_param:{a.arg}"
             tainted[a.arg] = {origin}
 

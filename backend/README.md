@@ -32,6 +32,26 @@ docker compose -f ../docker-compose.yml up -d db     # or point DATABASE_URL at 
 .venv/bin/pytest -q
 ```
 
+### Demo data
+
+```bash
+.venv/bin/python seed_demo.py            # creates team "acme-fintech" (24 pushes over 21 days)
+.venv/bin/python seed_demo.py --reset    # wipe and recreate it
+.venv/bin/python seed_demo.py --live-llm # same commits, analyzed by your configured LLM
+```
+
+The seed replays three weeks of commits to a sample FastAPI payments service through the
+**real** pipeline. GitHub is simulated in-process, so no App or network is needed. By default
+the two AI passes are answered from a script and labeled `demo-replay`. The story it tells:
+
+| Developer | What happens |
+|---|---|
+| maya-chen, alex-kim | consistently clean, documented pushes; alex's path-traversal false positive is rejected by the skeptic (upstream `secure_filename`) |
+| oscar-diaz | cross-file SQL injection (route → service → raw `execute`), fixed two days later; later an AI-only IDOR |
+| priya-natarajan | shell injection behind an admin route, then `pickle.loads` on the request body (CRITICAL), both fixed |
+| sam-okafor | cross-file SSRF through the webhook sender (confirmed, then fixed with an allow-list); a deeply nested refund helper drags craft below 180 |
+| jordan-blake | hardcoded Stripe live key; later an `eval` endpoint with a comment telling the AI to ignore it, which is flagged as `ZD-AI-001`, and the manipulated verifier verdict is overridden |
+
 ### GitHub App settings
 
 - **Webhook URL:** `https://<your-host>/api/webhooks/github` (use `smee.io`/`ngrok` locally)
