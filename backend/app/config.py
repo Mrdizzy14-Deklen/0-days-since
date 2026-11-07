@@ -36,15 +36,27 @@ class Settings(BaseSettings):
     llm_fallback_api_key: str = ""
     llm_fallback_model: str = ""
     llm_timeout_seconds: float = 90.0
+    llm_max_tokens: int = 4096
+    llm_context_chars: int = Field(default=60_000, ge=4_000)
 
     # Scanner limits (guard against hostile / gigantic repositories)
     max_python_files: int = Field(default=5000, ge=1)
     max_file_bytes: int = Field(default=1_000_000, ge=1)
     blast_radius_hops: int = Field(default=2, ge=1, le=5)
+    max_annotations: int = Field(default=150, ge=1)
+    readability_neutral_threshold: float = 180.0  # craft push score (0-300) below this -> neutral
+    graph_cache_size: int = Field(default=16, ge=0)
 
     # App
     frontend_origin: str = "http://localhost:3000"
     log_level: str = "INFO"
+    # Shared secret the Next.js server sends as `Authorization: Bearer <token>` to the dashboard
+    # API. Empty = open API (local development only).
+    api_token: str = ""
+
+    @property
+    def llm_configured(self) -> bool:
+        return bool(self.llm_api_key or self.llm_fallback_api_key)
 
     @property
     def github_private_key_pem(self) -> str:
