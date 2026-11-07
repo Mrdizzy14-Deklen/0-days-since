@@ -1,0 +1,19 @@
+services:
+  db:
+    image: timescale/timescaledb:2.17.2-pg16
+    environment:
+      POSTGRES_USER: zeroday
+      POSTGRES_PASSWORD: zeroday
+      POSTGRES_DB: zeroday
+    ports:
+      - "5432:5432"
+    volumes:
+      - zeroday-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zeroday -d zeroday"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  zeroday-db:
