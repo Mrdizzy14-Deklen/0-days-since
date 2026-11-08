@@ -87,6 +87,51 @@ async def init_db() -> None:
         logger.info("TimescaleDB hypertable 'score_snapshots' is ready")
     except Exception as exc:  # extension not installed / insufficient privileges
         logger.warning("TimescaleDB unavailable, using a plain table for score_snapshots: %s", exc)
+        return
+    await _ensure_timescale_extras(engine)
+
+
+DAILY_VIEW = "team_daily_scores"
+
+# Per-team daily roll-up of every scored push, maintained by TimescaleDB. Real-time
+# aggregation (materialized_only = false) adds rows newer than the last refresh on the fly.
+_TIMESCALE_EXTRAS = [
+    # columns added after a table already existed (create_all never alters tables)
+    "ALTER TABLE score_snapshots ADD COLUMN IF NOT EXISTS is_faulty boolean NOT NULL DEFAULT false",
+    f"""CREATE MATERIALIZED VIEW IF NOT EXISTS {DAILY_VIEW}
+        WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+        SELECT time_bucket(INTERVAL '1 day', recorded_at) AS day,
+               team_id,
+               count(*) AS pushes,
+               sum(CASE WHEN is_faulty THEN 1 ELSE 0 END) AS faulty_pushes,
+               sum(points_delta) AS net_points,
+               avg(composite_score)::double precision AS avg_composite,
+               min(composite_score) AS min_composite,
+               max(composite_score) AS max_composite
+        FROM score_snapshots
+        GROUP BY day, team_id
+        WITH NO DATA""",
+    f"""SELECT add_continuous_aggregate_policy('{DAILY_VIEW}',
+        start_offset => INTERVAL '400 days', end_offset => INTERVAL '1 hour',
+        schedule_interval => INTERVAL '15 minutes', if_not_exists => TRUE)""",
+    # old score history is read rarely: compress it (segment by team for the dashboard queries)
+    "ALTER TABLE score_snapshots SET (timescaledb.compress, "
+    "timescaledb.compress_segmentby = 'team_id')",
+    "SELECT add_compression_policy('score_snapshots', INTERVAL '90 days', if_not_exists => TRUE)",
+]
+
+
+async def _ensure_timescale_extras(engine: AsyncEngine) -> None:
+    """Continuous aggregate + policies. Each step is independent and safe to re-run."""
+    async with engine.connect() as conn:
+        conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
+        for statement in _TIMESCALE_EXTRAS:
+            try:
+                await conn.execute(text(statement))
+            except Exception as exc:  # e.g. compression already enabled with chunks present
+                logger.info("TimescaleDB setup step skipped (%s): %s",
+                            statement.split()[0:3], str(exc).splitlines()[0])
+        logger.info("TimescaleDB continuous aggregate '%s' is ready", DAILY_VIEW)
 
 
 async def dispose_db() -> None:

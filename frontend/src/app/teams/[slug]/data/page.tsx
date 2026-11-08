@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { FolderGit2 } from "lucide-react";
 
+import { DailyChart } from "@/components/daily-chart";
 import { CweBadge } from "@/components/leaderboard";
 import { PageShell, SectionHeader, SiteHeader } from "@/components/site-header";
 import { StatTiles } from "@/components/stat-tiles";
 import { TrendChart } from "@/components/trend-chart";
 import { getJson } from "@/lib/backend";
 import { CWE_TIPS } from "@/lib/insights";
-import type { Leaderboard, TeamStats, Trends } from "@/lib/types";
+import type { Leaderboard, TeamDaily, TeamStats, Trends } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -24,12 +25,13 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 export default async function TeamDataPage({ params }: Params) {
   const { slug } = await params;
   const s = encodeURIComponent(slug);
-  const [board, stats, trends] = await Promise.all([
+  const [board, stats, trends, daily] = await Promise.all([
     getJson<Leaderboard>(`teams/${s}/leaderboard`),
     getJson<TeamStats>(`teams/${s}/stats`),
     getJson<Trends>(`teams/${s}/trends?days=30`),
+    getJson<TeamDaily>(`teams/${s}/daily?days=30`),
   ]);
-  if (!board || !stats || !trends) notFound();
+  if (!board || !stats || !trends || !daily) notFound();
   const now = Date.now();
 
   return (
@@ -45,14 +47,29 @@ export default async function TeamDataPage({ params }: Params) {
             <StatTiles stats={stats} developers={board.developers} />
           </div>
 
-          <section aria-labelledby="trend-title" style={slot(2)}>
+          <section aria-labelledby="daily-title" style={slot(2)}>
+            <SectionHeader
+              id="daily-title"
+              title="Pushes per day"
+              description={
+                daily.source === "timescale_continuous_aggregate"
+                  ? "Rolled up inside Tiger Cloud by a TimescaleDB continuous aggregate (refreshed every 15 minutes, real-time for today)."
+                  : "Computed from score history."
+              }
+            />
+            <div className="card-surface p-4 sm:p-5">
+              <DailyChart series={daily.series} />
+            </div>
+          </section>
+
+          <section aria-labelledby="trend-title" style={slot(3)}>
             <SectionHeader id="trend-title" title="Score over time" />
             <div className="card-surface p-4 sm:p-5">
               <TrendChart series={trends.series} developers={board.developers} now={now} />
             </div>
           </section>
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" style={slot(3)}>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" style={slot(4)}>
             <section aria-labelledby="weak-title">
               <SectionHeader id="weak-title" title="Top weaknesses" />
               <div className="card-surface p-4">

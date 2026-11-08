@@ -593,6 +593,7 @@ async def _scan_locked(gh: GitHubApp, token: str, job: ScanJob, push_id: int, re
             security_score=dev.security_score, craft_score=dev.craft_score,
             composite_score=dev.composite_score, total_pushes=dev.total_pushes,
             faulty_pushes=dev.faulty_pushes, points_delta=score.points_delta,
+            is_faulty=score.is_faulty,
         ))
         session.add_all([dev, push])
 

@@ -151,6 +151,10 @@ async def test_end_to_end(db: None, gh: FakeGitHub) -> None:
         assert stats["blocked_merges"] == 1 and stats["top_cwes"][0]["cwe"] == "CWE-89"
 
         trends = (await client.get("/api/teams/acme/trends")).json()
+        daily = (await client.get("/api/teams/acme/daily")).json()
+        assert daily["source"] == "computed"  # SQLite: no continuous aggregate
+        assert sum(d["pushes"] for d in daily["series"]) == 2
+        assert sum(d["faulty_pushes"] for d in daily["series"]) == 1
         assert [p["security"] for p in trends["series"]["alice"]] == [210, 455]
 
         dev_detail = (await client.get(f"/api/developers/{alice['id']}")).json()

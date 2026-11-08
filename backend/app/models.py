@@ -441,3 +441,5 @@ class ScoreSnapshot(SQLModel, table=True):
     total_pushes: int
     faulty_pushes: int
     points_delta: int = Field(default=0)
+    # this push had a verified vulnerability (feeds the team_daily_scores continuous aggregate)
+    is_faulty: bool = Field(default=False)

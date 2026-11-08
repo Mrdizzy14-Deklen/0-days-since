@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 /** Read-only routes the browser may reach (the API token never leaves the server). */
 const ALLOWED = [
-  /^teams\/[\w.-]+\/(leaderboard|stats|pushes|trends|stream)$/,
+  /^teams\/[\w.-]+\/(leaderboard|stats|pushes|trends|daily|stream)$/,
   /^pushes\/\d+$/,
   /^developers\/\d+$/,
 ];

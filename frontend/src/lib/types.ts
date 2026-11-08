@@ -304,3 +304,19 @@ export interface AgentTrace {
   investigation?: AgentInvestigation | null;
   fixes?: AgentFix[];
 }
+
+export interface DailyPoint {
+  day: string;
+  pushes: number;
+  faulty_pushes: number;
+  net_points: number;
+  avg_composite: number;
+  min_composite: number;
+  max_composite: number;
+}
+
+export interface TeamDaily {
+  days: number;
+  source: "timescale_continuous_aggregate" | "computed";
+  series: DailyPoint[];
+}

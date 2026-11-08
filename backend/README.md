@@ -63,6 +63,21 @@ the two AI passes are answered from a script and labeled `demo-replay`. The stor
   fix PRs)
 - **Subscribe to events:** Push, Pull request, (Installation events are always sent)
 
+## Tiger Data (TimescaleDB)
+
+With `ENABLE_TIMESCALE=true` on Postgres, `init_db()` sets up:
+
+- `score_snapshots` as a **hypertable** on `recorded_at` (every push's score, per developer)
+- `team_daily_scores`, a **continuous aggregate** (`time_bucket('1 day')` per team: pushes,
+  pushes with confirmed vulnerabilities, net points, average/min/max score) with real-time
+  aggregation and a refresh policy every 15 minutes; it powers `GET /api/teams/{slug}/daily`
+  and the "Pushes per day" chart (on SQLite the API computes the same numbers itself)
+- a **compression policy** for score history older than 90 days, segmented by team
+
+Tiger Cloud signs server certificates with its own CA (`ca.timescale.com`). Save that CA
+certificate and set `DATABASE_SSL_ROOT_CERT` to its path so TLS is fully verified (CA and
+hostname); public CA bundles cannot verify it.
+
 ## Nemotron agent
 
 Pass 1 is an agent, not a single prompt. Nemotron writes a plan, then investigates the push

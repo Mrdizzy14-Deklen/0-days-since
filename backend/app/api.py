@@ -18,12 +18,12 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import case, func
+from sqlalchemy import case, func, text
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import get_settings
-from app.db import get_session, get_session_factory
+from app.db import DAILY_VIEW, get_session, get_session_factory
 from app.enums import CheckConclusion, FindingCategory, FindingStatus, ScanStatus
 from app.models import Developer, Finding, PushEvent, Repository, ScoreSnapshot, Team
 
@@ -255,6 +255,51 @@ async def team_trends(slug: str, session: SessionDep, principal: PrincipalDep,
             "delta": snap.points_delta, "push_event_id": snap.push_event_id,
         })
     return {"days": days, "series": series}
+
+
+@router.get("/teams/{slug}/daily")
+async def team_daily(slug: str, session: SessionDep, principal: PrincipalDep,
+                     days: Annotated[int, Query(ge=1, le=365)] = 30) -> dict[str, Any]:
+    """Pushes, faulty pushes and score per day.
+
+    On Tiger Data / TimescaleDB this reads the ``team_daily_scores`` continuous aggregate,
+    which the database keeps up to date; elsewhere the same numbers are computed here.
+    """
+    team = await _team_for(session, slug, principal)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    conn = await session.connection()
+    if conn.dialect.name == "postgresql" and get_settings().enable_timescale:
+        try:
+            async with conn.begin_nested():
+                rows = (await conn.execute(text(
+                    f"SELECT day, pushes, faulty_pushes, net_points, avg_composite, "
+                    f"min_composite, max_composite FROM {DAILY_VIEW} "
+                    "WHERE team_id = :team AND day >= :since ORDER BY day"),
+                    {"team": team.id, "since": since})).all()
+            return {"days": days, "source": "timescale_continuous_aggregate",
+                    "series": [{"day": _iso(r[0]), "pushes": int(r[1]),
+                                "faulty_pushes": int(r[2] or 0), "net_points": int(r[3] or 0),
+                                "avg_composite": round(float(r[4]), 1),
+                                "min_composite": int(r[5]), "max_composite": int(r[6])}
+                               for r in rows]}
+        except Exception:  # aggregate missing (no Timescale): fall through
+            pass
+    snaps = (await session.exec(select(ScoreSnapshot).where(
+        ScoreSnapshot.team_id == team.id, col(ScoreSnapshot.recorded_at) >= since)
+        .order_by(col(ScoreSnapshot.recorded_at)))).all()
+    buckets: dict[str, list[ScoreSnapshot]] = {}
+    for snap in snaps:
+        ts = snap.recorded_at if snap.recorded_at.tzinfo else \
+            snap.recorded_at.replace(tzinfo=timezone.utc)
+        day = ts.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        buckets.setdefault(day.isoformat(), []).append(snap)
+    return {"days": days, "source": "computed", "series": [
+        {"day": day, "pushes": len(group), "faulty_pushes": sum(g.is_faulty for g in group),
+         "net_points": sum(g.points_delta for g in group),
+         "avg_composite": round(sum(g.composite_score for g in group) / len(group), 1),
+         "min_composite": min(g.composite_score for g in group),
+         "max_composite": max(g.composite_score for g in group)}
+        for day, group in buckets.items()]}
 
 
 @router.get("/developers/{developer_id}")
