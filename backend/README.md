@@ -6,6 +6,8 @@ FastAPI + PostgreSQL (Tiger Data / TimescaleDB) security & code-craft engine.
 
 ```
 app/
+  agent.py       # Nemotron agent: plan -> code-graph tool calls -> report
+  fixer.py       # agent auto-fix: patch, re-scan to verify, open PR
   config.py      # env-driven settings (DB, GitHub App, LLM endpoints, limits)
   enums.py       # shared enums (severity weights, statuses, kinds)
   models.py      # SQLModel tables (teams, repos, developers, pushes, findings, graph, snapshots)
@@ -57,8 +59,25 @@ the two AI passes are answered from a script and labeled `demo-replay`. The stor
 - **Webhook URL:** `https://<your-host>/api/webhooks/github` (use `smee.io`/`ngrok` locally)
 - **Webhook secret:** same value as `GITHUB_WEBHOOK_SECRET` (unsigned deliveries are rejected)
 - **Repository permissions:** Checks: *Read & write*; Contents: *Read*; Metadata: *Read*;
-  Pull requests: *Read*
+  Pull requests: *Read* (set Contents and Pull requests to *Read & write* to let the agent open
+  fix PRs)
 - **Subscribe to events:** Push, Pull request, (Installation events are always sent)
+
+## Nemotron agent
+
+Pass 1 is an agent, not a single prompt. Nemotron writes a plan, then investigates the push
+with tools over the cross-file call graph (`symbol`, `read_code`, `callers`, `callees`,
+`trace`, `search`), one call per turn, seeing each real result before choosing the next. It
+finishes with a report in the Pass 1 schema, so the adversarial verifier (Pass 2) and all
+guardrails still apply. If the agent fails or never reports, the one-shot review runs instead.
+
+For each confirmed vulnerability the agent then proposes a minimal patch. The patch must
+parse and is **re-scanned**: the static rule must stop firing, or untrusted input must no
+longer reach the sink, or (for AI-only findings) an adversarial reviewer must agree it is
+fixed. With `AGENT_OPEN_FIX_PRS=true` (and Contents + Pull requests set to *Read & write*),
+verified fixes are pushed to a `zeroday/fix-<sha>-<n>` branch and opened as a pull request
+linked from the check run. The plan, every tool call and each fix are shown on the push
+page's **Agent** tab.
 
 ## How a push is scored
 

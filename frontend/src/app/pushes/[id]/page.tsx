@@ -17,6 +17,7 @@ import {
 
 import { RichText } from "@/components/rich-text";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { AgentPanel } from "@/components/agent-panel";
 import { BlastRadiusViewer } from "@/components/blast-radius/viewer";
 import { DevAvatar } from "@/components/dev-avatar";
 import { FixList, NonCountedFindings, QualityFindingList } from "@/components/findings";
@@ -192,7 +193,10 @@ export default async function PushPage({ params }: Params) {
               issues: counted.length,
               files: affected,
               craft: push.craft_push_score !== null ? Math.round(push.craft_push_score) : null,
+              agentSteps: data.agent?.investigation?.steps.length ?? 0,
+              fixes: data.agent?.fixes?.length ?? 0,
             }}
+            agent={<AgentPanel agent={data.agent} />}
             review={
               <div className="space-y-8">
                 <section aria-labelledby="fix-title">
@@ -205,7 +209,7 @@ export default async function PushPage({ params }: Params) {
                         : "The code map and both AI passes found nothing that counts against the score."
                     }
                   />
-                  <FixList findings={counted} graphSymbols={graphSymbols} />
+                  <FixList findings={counted} graphSymbols={graphSymbols} fixedTitles={new Set((data.agent?.fixes ?? []).map((f) => f.finding_title))} />
                 </section>
                 {notCounted.length > 0 && (
                   <section aria-labelledby="other-title">

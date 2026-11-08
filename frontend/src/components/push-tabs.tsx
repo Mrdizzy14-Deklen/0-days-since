@@ -1,27 +1,29 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { ArrowRight, FileText, Network, Sparkles } from "lucide-react";
+import { ArrowRight, Bot, FileText, Network, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type Tab = "review" | "impact" | "craft";
-const TABS: Tab[] = ["review", "impact", "craft"];
+type Tab = "review" | "agent" | "impact" | "craft";
+const TABS: Tab[] = ["review", "agent", "impact", "craft"];
 
 const TabContext = createContext<(t: Tab) => void>(() => {});
 
 /** Push page tabs. The active tab is mirrored in the URL hash so links can point at it. */
 export function PushTabs({
   review,
+  agent,
   impact,
   craft,
   counts,
 }: {
   review: React.ReactNode;
+  agent: React.ReactNode;
   impact: React.ReactNode;
   craft: React.ReactNode;
-  counts: { issues: number; files: number; craft: number | null };
+  counts: { issues: number; files: number; craft: number | null; agentSteps: number; fixes: number };
 }) {
   const [tab, setTabState] = useState<Tab>("review");
   useEffect(() => {
@@ -36,6 +38,12 @@ export function PushTabs({
 
   const items: { id: Tab; label: string; icon: typeof FileText; badge: string | null }[] = [
     { id: "review", label: "Review", icon: FileText, badge: counts.issues ? String(counts.issues) : null },
+    {
+      id: "agent",
+      label: "Agent",
+      icon: Bot,
+      badge: counts.fixes ? `${counts.fixes} fix${counts.fixes === 1 ? "" : "es"}` : counts.agentSteps ? `${counts.agentSteps} steps` : null,
+    },
     { id: "impact", label: "Impact map", icon: Network, badge: counts.files ? `${counts.files} files` : null },
     { id: "craft", label: "Code craft", icon: Sparkles, badge: counts.craft !== null ? `${counts.craft}/300` : null },
   ];
@@ -71,7 +79,7 @@ export function PushTabs({
         </div>
         {TABS.map((id) => (
           <div key={id} role="tabpanel" id={`panel-${id}`} aria-labelledby={`tab-${id}`} hidden={tab !== id} className="pt-6">
-            {id === "review" ? review : id === "impact" ? impact : craft}
+            {id === "review" ? review : id === "agent" ? agent : id === "impact" ? impact : craft}
           </div>
         ))}
       </div>
@@ -95,5 +103,15 @@ export function GoToCraft({ children }: { children: React.ReactNode }) {
     <button type="button" className="font-medium text-brand-text underline-offset-2 hover:underline" onClick={() => setTab("craft")}>
       {children}
     </button>
+  );
+}
+
+/** Button that switches to the Agent tab, where the verified patch lives. */
+export function ShowAgentFix() {
+  const setTab = useContext(TabContext);
+  return (
+    <Button variant="outline" size="sm" onClick={() => setTab("agent")}>
+      <Bot className="size-3.5" /> See the agent&apos;s fix
+    </Button>
   );
 }

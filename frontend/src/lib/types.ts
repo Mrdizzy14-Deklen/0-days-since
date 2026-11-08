@@ -245,6 +245,7 @@ export interface PushDetail {
   quality_metrics: QualityMetrics | null;
   blast_radius: Partial<BlastRadius>;
   incident_scope: IncidentModule[];
+  agent?: AgentTrace;
 }
 
 export interface ScorePoint {
@@ -266,4 +267,40 @@ export interface DeveloperDetail {
   developer: Developer;
   history: ScorePoint[];
   recent_pushes: Push[];
+}
+
+export interface AgentStep {
+  step: number;
+  thought: string;
+  action: string;
+  args: Record<string, unknown>;
+  observation: string;
+}
+
+export interface AgentInvestigation {
+  plan: string[];
+  steps: AgentStep[];
+  model: string | null;
+  finished: boolean;
+  error: string | null;
+}
+
+export interface AgentFix {
+  finding_title: string;
+  rule_id: string;
+  cwe: string | null;
+  file_paths: string[];
+  explanation: string;
+  commit_message: string;
+  diff: string;
+  verified: boolean;
+  verification: string;
+  pr_number: number | null;
+  pr_url: string | null;
+  error: string | null;
+}
+
+export interface AgentTrace {
+  investigation?: AgentInvestigation | null;
+  fixes?: AgentFix[];
 }

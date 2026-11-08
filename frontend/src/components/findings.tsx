@@ -2,7 +2,7 @@ import { Bot, ChevronRight, Cpu, FileCode, Lightbulb, PartyPopper, ShieldCheck, 
 
 import { RichText } from "@/components/rich-text";
 import { CopyButton } from "@/components/copy-button";
-import { ShowAttackPath } from "@/components/push-tabs";
+import { ShowAgentFix, ShowAttackPath } from "@/components/push-tabs";
 import { SeverityBadge } from "@/components/status";
 import { cweName } from "@/lib/format";
 import type { Finding } from "@/lib/types";
@@ -46,7 +46,15 @@ const SEVERITY_BORDER: Record<string, string> = {
 };
 
 /** The actionable list: confirmed issues that count against the score. */
-export function FixList({ findings, graphSymbols }: { findings: Finding[]; graphSymbols: Set<string> }) {
+export function FixList({
+  findings,
+  graphSymbols,
+  fixedTitles = new Set(),
+}: {
+  findings: Finding[];
+  graphSymbols: Set<string>;
+  fixedTitles?: Set<string>;
+}) {
   if (findings.length === 0) {
     return (
       <div className="card-surface flex items-center gap-3 p-5">
@@ -96,6 +104,7 @@ export function FixList({ findings, graphSymbols }: { findings: Finding[]; graph
               </div>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-3">
+              {fixedTitles.has(f.title) && <ShowAgentFix />}
               {hasPath && <ShowAttackPath />}
               {f.verifier_reasoning && (
                 <details className="group min-w-0 flex-1 text-sm">
