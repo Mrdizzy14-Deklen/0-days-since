@@ -5,6 +5,10 @@ cross-file vulnerabilities and code craft, then ranks developers on a 1,000-poin
 (700 Security Reliability + 300 Code Craft & Readability). Critical or high findings fail the
 GitHub Check, which blocks the merge.
 
+Teams can connect a **Discord channel** (team page > gear icon > Discord alerts) by pasting a
+channel webhook URL. Every faulty push is posted there: the commit and author, the days-since
+counter it reset, the score change, what to fix (file:line) and any fix PR the agent opened.
+
 ```
 backend/    FastAPI + PostgreSQL/Tiger Data scanning & scoring engine (Python 3.11+)
 frontend/   Next.js 15 dashboard: leaderboard, live push feed, trends, blast-radius viewer

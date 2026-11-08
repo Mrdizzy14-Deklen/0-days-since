@@ -21,14 +21,24 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import case, func, text
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app import discord
 from app.config import get_settings
 from app.db import DAILY_VIEW, get_session, get_session_factory
 from app.enums import CheckConclusion, FindingCategory, FindingStatus, ScanStatus
-from app.models import Developer, Finding, PushEvent, Repository, ScoreSnapshot, Team
+from app.models import (
+    Developer,
+    Finding,
+    PushEvent,
+    Repository,
+    ScoreSnapshot,
+    Team,
+    TeamIntegration,
+)
 
 router = APIRouter(prefix="/api")
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -95,6 +105,22 @@ async def _require_member(session: AsyncSession, team: Team | int | None,
         team = await session.get(Team, team)
     if team is None or not await _can_view(session, team, principal):
         raise HTTPException(status_code=404, detail="team not found")  # do not leak existence
+
+
+async def _require_editor(session: AsyncSession, slug: str, principal: Principal) -> Team:
+    """Settings changes: a signed-in member of the team (public read-only access is not enough)."""
+    team = await _team_for(session, slug, principal)
+    if principal.open_mode:
+        return team
+    is_member = principal.login is not None and (
+        (team.github_installation_id is not None
+         and team.github_installation_id in principal.installations)
+        or (await session.exec(select(Developer.id).where(
+            Developer.team_id == team.id, Developer.github_login == principal.login))).first()
+        is not None)
+    if not is_member:
+        raise HTTPException(status_code=403, detail="only team members can change settings")
+    return team
 
 
 # --------------------------------------------------------------------------------------
@@ -429,3 +455,101 @@ async def push_stream(slug: str, request: Request, principal: PrincipalDep,
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# --------------------------------------------------------------------------------------
+# Integrations (Discord)
+# --------------------------------------------------------------------------------------
+
+
+class DiscordSettings(BaseModel):
+    webhook_url: str | None = Field(default=None, max_length=300)  # None = keep current
+    include_warnings: bool = False
+
+
+async def _integration(session: AsyncSession, team_id: int) -> TeamIntegration | None:
+    return (await session.exec(select(TeamIntegration).where(
+        TeamIntegration.team_id == team_id))).first()
+
+
+def _integration_json(row: TeamIntegration | None, can_edit: bool) -> dict[str, Any]:
+    url = row.discord_webhook_url if row else None
+    return {"can_edit": can_edit, "discord": {
+        "connected": bool(url),
+        "webhook": discord.mask_webhook_url(url),
+        "include_warnings": bool(row and row.discord_include_warnings),
+        "last_sent_at": _iso(row.discord_last_sent_at) if row else None,
+        "last_error": row.discord_last_error if row else None,
+    }}
+
+
+@router.get("/teams/{slug}/integrations")
+async def get_integrations(slug: str, session: SessionDep, principal: PrincipalDep
+                           ) -> dict[str, Any]:
+    team = await _team_for(session, slug, principal)
+    try:
+        await _require_editor(session, slug, principal)
+        can_edit = True
+    except HTTPException:
+        can_edit = False
+    return _integration_json(await _integration(session, team.id), can_edit)
+
+
+@router.put("/teams/{slug}/integrations/discord")
+async def put_discord(slug: str, body: DiscordSettings, session: SessionDep,
+                      principal: PrincipalDep) -> dict[str, Any]:
+    team = await _require_editor(session, slug, principal)
+    row = await _integration(session, team.id) or TeamIntegration(team_id=team.id)
+    if body.webhook_url is not None:
+        try:
+            url = discord.normalize_webhook_url(body.webhook_url)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        error = await discord.send(url, discord.test_message(
+            team.name, f"{get_settings().frontend_origin.rstrip('/')}/teams/{team.slug}"))
+        if error:
+            raise HTTPException(status_code=422, detail=error)
+        row.discord_webhook_url = url
+        row.discord_last_error = None
+        row.discord_last_sent_at = datetime.now(timezone.utc)
+    elif not row.discord_webhook_url:
+        raise HTTPException(status_code=422, detail="Paste a Discord webhook URL first")
+    row.discord_include_warnings = body.include_warnings
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return _integration_json(row, True)
+
+
+@router.post("/teams/{slug}/integrations/discord/test")
+async def test_discord(slug: str, session: SessionDep, principal: PrincipalDep
+                       ) -> dict[str, Any]:
+    team = await _require_editor(session, slug, principal)
+    row = await _integration(session, team.id)
+    if row is None or not row.discord_webhook_url:
+        raise HTTPException(status_code=404, detail="Discord is not connected")
+    error = await discord.send(row.discord_webhook_url, discord.test_message(
+        team.name, f"{get_settings().frontend_origin.rstrip('/')}/teams/{team.slug}"))
+    row.discord_last_error = error
+    if error is None:
+        row.discord_last_sent_at = datetime.now(timezone.utc)
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    if error:
+        raise HTTPException(status_code=502, detail=error)
+    return _integration_json(row, True)
+
+
+@router.delete("/teams/{slug}/integrations/discord")
+async def delete_discord(slug: str, session: SessionDep, principal: PrincipalDep
+                         ) -> dict[str, Any]:
+    team = await _require_editor(session, slug, principal)
+    row = await _integration(session, team.id)
+    if row is not None:
+        row.discord_webhook_url = None
+        row.discord_last_error = None
+        session.add(row)
+        await session.commit()
+        await session.refresh(row)
+    return _integration_json(row, True)

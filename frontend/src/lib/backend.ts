@@ -65,3 +65,25 @@ export async function getJson<T>(path: string): Promise<T | null> {
   }
   return (await res.json()) as T;
 }
+
+/** Write call (PUT/POST/DELETE) for server actions. Returns the JSON body or the error detail. */
+export async function sendJson<T>(
+  path: string,
+  method: "PUT" | "POST" | "DELETE",
+  body?: unknown,
+): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
+  let res: Response;
+  try {
+    res = await backendFetch(path, {
+      method,
+      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    return { ok: false, error: "The 0 Days Since API is unreachable. Try again shortly." };
+  }
+  const data = await res.json().catch(() => null);
+  if (res.ok) return { ok: true, data: data as T };
+  const detail = data && typeof data.detail === "string" ? data.detail : `HTTP ${res.status}`;
+  return { ok: false, error: detail };
+}

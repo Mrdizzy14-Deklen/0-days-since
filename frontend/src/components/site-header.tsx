@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Check, ChevronsUpDown, LogOut } from "lucide-react";
+import { Check, ChevronsUpDown, LogOut, Settings } from "lucide-react";
 
 import { signOut } from "@/auth";
 import { DevAvatar } from "@/components/dev-avatar";
@@ -22,7 +22,7 @@ import type { Push, TeamRef, TeamSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { getViewer } from "@/lib/viewer";
 
-export type Section = "overview" | "pushes" | "data" | "play" | null;
+export type Section = "overview" | "pushes" | "data" | "play" | "settings" | null;
 
 function TeamSwitcher({ team, teams }: { team: TeamRef; teams: TeamSummary[] }) {
   if (teams.length <= 1) {
@@ -119,6 +119,20 @@ export async function SiteHeader({ team, section = null }: { team?: TeamRef | nu
             <span className="eyebrow mr-1 hidden rounded-[3px] border border-dashed border-foreground/40 px-2 py-1 lg:inline">
               Demo mode · no sign-in
             </span>
+          )}
+          {team && (
+            <Button
+              asChild
+              variant="ghost"
+              size="icon"
+              aria-label="Team settings"
+              title="Team settings"
+              className={cn(section === "settings" && "bg-brand text-brand-foreground hover:bg-brand")}
+            >
+              <Link href={`/teams/${team.slug}/settings`}>
+                <Settings className="size-4" />
+              </Link>
+            </Button>
           )}
           <ScoringGuide />
           <ThemeToggle />

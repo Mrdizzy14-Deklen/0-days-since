@@ -22,6 +22,7 @@ With the backend running and the demo team seeded (`backend/seed_demo.py`), open
 |---|---|
 | `/teams/[slug]` | **Overview**: the repo name, the "days since last incident" board, the leaderboard (podium + ranked rows: composite, Security /700 and Craft /300 bars, pushes vs. faulty, streak, 7-day rank change, most frequent CWE / code smell) and the live feed of latest pushes |
 | `/teams/[slug]/pushes` | **Pushes**: every push with result and developer filters, search, grouped by day |
+| `/teams/[slug]/settings` | **Settings** (gear icon): connect a Discord channel that is told about every faulty push (optionally warnings too); team members only |
 | `/teams/[slug]/data` | **Data**: team averages, score over time (chart + table view), top weaknesses with fix tips, connected repositories |
 | `/pushes/[id]` | The Check Run's *Details* link: one-sentence verdict, then **Review** (what to fix), **Impact map** (cross-file attack paths, affected files) and **Code craft** tabs |
 | `/developers/[id]` | Player card: rank, achievements, focus-area tip, score breakdown and history, recent pushes |

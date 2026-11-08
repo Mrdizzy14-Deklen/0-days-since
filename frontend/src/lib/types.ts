@@ -322,3 +322,17 @@ export interface TeamDaily {
   source: "timescale_continuous_aggregate" | "computed";
   series: DailyPoint[];
 }
+
+export interface DiscordIntegration {
+  connected: boolean;
+  /** Masked: the webhook token never leaves the backend. */
+  webhook: string | null;
+  include_warnings: boolean;
+  last_sent_at: string | null;
+  last_error: string | null;
+}
+
+export interface Integrations {
+  can_edit: boolean;
+  discord: DiscordIntegration;
+}

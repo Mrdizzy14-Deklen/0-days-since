@@ -5,6 +5,7 @@ Tenancy: every row hangs off a `Team` (one GitHub App installation == one team).
 Tables
 ------
 - teams            : tenant + GitHub App installation
+- team_integrations: per-team notification settings (Discord webhook)
 - repositories     : connected repos and their baseline/scan state
 - repo_files       : latest known content of every analyzable .py file (lets us
                      rebuild the whole-project call graph without re-downloading the repo)
@@ -92,6 +93,28 @@ class Team(SQLModel, table=True):
     github_account_id: int | None = Field(default=None, sa_type=sa.BigInteger)
     github_account_type: str | None = Field(default=None, max_length=20)  # "User" | "Organization"
     installation_suspended: bool = Field(default=False)
+
+    created_at: datetime = Field(default_factory=utcnow, sa_type=_tz(), nullable=False)
+    updated_at: datetime = Field(
+        default_factory=utcnow,
+        sa_type=_tz(),
+        nullable=False,
+        sa_column_kwargs={"onupdate": utcnow},
+    )
+
+
+class TeamIntegration(SQLModel, table=True):
+    """Per-team notification settings (one row per team). The Discord webhook URL is a secret:
+    the API only ever returns it masked."""
+
+    __tablename__ = "team_integrations"
+
+    id: int | None = Field(default=None, primary_key=True)
+    team_id: int = Field(foreign_key="teams.id", unique=True, index=True)
+    discord_webhook_url: str | None = Field(default=None, max_length=300)
+    discord_include_warnings: bool = Field(default=False)
+    discord_last_sent_at: datetime | None = Field(default=None, sa_type=_tz())
+    discord_last_error: str | None = Field(default=None, max_length=500)
 
     created_at: datetime = Field(default_factory=utcnow, sa_type=_tz(), nullable=False)
     updated_at: datetime = Field(

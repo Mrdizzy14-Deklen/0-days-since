@@ -20,6 +20,7 @@ from sqlalchemy import delete, insert
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app import discord
 from app.ai_scanner import AIScanner, ScanFinding, ScanInput, ScanResult
 from app.ast_engine import BlastRadius, ProjectGraph, changed_lines_from_patch
 from app.config import Settings, get_settings
@@ -607,6 +608,9 @@ async def _scan_locked(gh: GitHubApp, token: str, job: ScanJob, push_id: int, re
                                 annotations=select_annotations(result.findings,
                                                                settings.max_annotations),
                                 details_url=details_url)
+
+    # ---- 6. team channel (best-effort, never fails the scan) ----------------------------
+    await discord.notify_push(push_id, [f.to_dict() for f in fixes])
 
 
 # --------------------------------------------------------------------------------------

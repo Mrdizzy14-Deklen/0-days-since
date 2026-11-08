@@ -50,13 +50,18 @@ def push_payload(before: str, after: str, message: str) -> dict[str, Any]:
     }
 
 
-@pytest.fixture()
-def gh(fake_github: FakeGitHub) -> FakeGitHub:
+def seed_commits(fake_github: FakeGitHub) -> FakeGitHub:
+    """The commits every pipeline scenario uses: baseline A, vulnerable B, fixed C."""
     fake_github.commit("main", FILES_A)
     fake_github.commit(SHA_A, FILES_A)
     fake_github.commit(SHA_B, FILES_B)
     fake_github.commit(SHA_C, FILES_C)
     return fake_github
+
+
+@pytest.fixture()
+def gh(fake_github: FakeGitHub) -> FakeGitHub:
+    return seed_commits(fake_github)
 
 
 def _deterministic() -> AIScanner:
