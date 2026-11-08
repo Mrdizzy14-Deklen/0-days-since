@@ -328,19 +328,31 @@ async def test_agent_opens_verified_fix_pr(db: None, gh: FakeGitHub,
     get_settings.cache_clear()
 
 
-def test_bot_pushes_and_fix_branches_are_not_scored() -> None:
+async def test_bot_pushes_and_fix_branches_are_listed_not_scanned(db: None,
+                                                                   gh: FakeGitHub) -> None:
     def payload(**over: Any) -> dict[str, Any]:
         p = push_payload(SHA_A, SHA_B, "x")
         p.update(over)
         return p
 
-    assert job_from_push(payload(), "d") is not None
+    human = job_from_push(payload(), "d")
+    assert human is not None and human.skip_reason is None
     app_bot = {"login": "0-days-since[bot]", "id": 9, "type": "Bot"}
-    assert job_from_push(payload(sender=app_bot), "d") is None
     head = {**push_payload(SHA_A, SHA_B, "x")["head_commit"],
             "author": {"username": "dependabot[bot]", "name": "dependabot"}}
-    assert job_from_push(payload(head_commit=head), "d") is None
-    assert job_from_push(payload(ref="refs/heads/zeroday/fix-abc1234-1"), "d") is None
+    bots = [job_from_push(payload(sender=app_bot), "d"),
+            job_from_push(payload(head_commit=head), "d"),
+            job_from_push(payload(ref="refs/heads/zeroday/fix-abc1234-1"), "d")]
+    assert all(j is not None and j.skip_reason for j in bots)
+
+    push_id = await run_scan(job_from_push(payload(sender=app_bot), "d-bot"),
+                             gh_transport=gh.transport, scanner=_deterministic())
+    assert push_id is not None and not gh.check_runs
+    async with session_scope() as s:
+        push = await s.get(PushEvent, push_id)
+        assert push.status is ScanStatus.COMPLETED and push.conclusion is None
+        assert push.developer_id is None
+        assert not (await s.exec(select(Developer))).all()
 
 
 async def test_scans_cut_off_by_a_restart_are_resumed(db: None, gh: FakeGitHub) -> None:
@@ -356,9 +368,13 @@ async def test_scans_cut_off_by_a_restart_are_resumed(db: None, gh: FakeGitHub) 
                           event_type=seed.event_type, ref="refs/heads/main", before_sha=SHA_A,
                           after_sha=SHA_B, commit_message="Add user lookup",
                           author_login="alice", status=ScanStatus.IN_PROGRESS)
-        s.add(stuck)
+        bot = PushEvent(team_id=seed.team_id, repository_id=seed.repository_id,
+                        delivery_id="d-bot", event_type=seed.event_type,
+                        ref="refs/heads/zeroday/fix-abc1234-1", after_sha=SHA_C,
+                        author_login="0-days-since[bot]", status=ScanStatus.IN_PROGRESS)
+        s.add_all([stuck, bot])
         await s.flush()
-        stuck_id = stuck.id
+        stuck_id, bot_id = stuck.id, bot.id
 
     assert await resume_interrupted_scans(gh_transport=gh.transport,
                                           scanner=_deterministic()) == [stuck_id]
@@ -366,6 +382,8 @@ async def test_scans_cut_off_by_a_restart_are_resumed(db: None, gh: FakeGitHub) 
         push = await s.get(PushEvent, stuck_id)
         assert push.status is ScanStatus.COMPLETED and push.conclusion is CheckConclusion.FAILURE
         assert push.check_run_id is not None and push.quality_metrics
+        bot_push = await s.get(PushEvent, bot_id)
+        assert bot_push.status is ScanStatus.COMPLETED and bot_push.conclusion is None
     run = gh.check_runs[max(gh.check_runs)]
     assert run["head_sha"] == SHA_B and run["status"] == "completed"
     # nothing left to resume

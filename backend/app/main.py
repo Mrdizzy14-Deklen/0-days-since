@@ -108,11 +108,11 @@ async def github_webhook(
         job = job_from_push(payload, x_github_delivery)
         if job is not None:
             background.add_task(run_scan, job)
-            queued = "scan"
+            queued = "skip" if job.skip_reason else "scan"
     elif event == "pull_request":
         job = job_from_pull_request(payload, x_github_delivery)
         if job is not None:
             background.add_task(run_scan, job)
-            queued = "scan"
+            queued = "skip" if job.skip_reason else "scan"
     logger.info("webhook %s (%s) -> %s", event, x_github_delivery, queued or "ignored")
     return JSONResponse({"accepted": True, "queued": queued}, status_code=202)

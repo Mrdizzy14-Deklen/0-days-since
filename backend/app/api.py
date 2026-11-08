@@ -256,7 +256,8 @@ async def team_stats(slug: str, session: SessionDep, principal: PrincipalDep
     totals = (await session.exec(select(
         func.count(col(PushEvent.id)),
         func.sum(case((col(PushEvent.is_faulty), 1), else_=0)),
-    ).where(PushEvent.team_id == team.id, PushEvent.status == ScanStatus.COMPLETED))).one()
+    ).where(PushEvent.team_id == team.id, PushEvent.status == ScanStatus.COMPLETED,
+            col(PushEvent.conclusion).is_not(None)))).one()  # bot pushes have no verdict
     blocked = (await session.exec(select(func.count(col(PushEvent.id))).where(
         PushEvent.team_id == team.id,
         PushEvent.conclusion == CheckConclusion.FAILURE))).one()

@@ -129,6 +129,7 @@ class ScanJob:
     commit_url: str | None = None
     pr_number: int | None = None
     delivery_id: str | None = None
+    skip_reason: str | None = None  # set for bot pushes: recorded in the feed, never scanned
 
 
 FIX_BRANCH_PREFIX = "zeroday/fix-"
@@ -137,6 +138,14 @@ FIX_BRANCH_PREFIX = "zeroday/fix-"
 def is_bot(login: str | None, account_type: str | None = None) -> bool:
     """GitHub Apps and bots (this app's own fix commits, Dependabot, ...) are never scored."""
     return account_type == "Bot" or (login or "").lower().endswith("[bot]")
+
+
+BOT_SKIP_REASON = "Bot push; not scanned or scored."
+
+
+def is_bot_push(login: str | None, ref: str | None) -> bool:
+    """The agent's own fix branches and bot-authored pushes are listed but never scanned."""
+    return is_bot(login) or (ref or "").startswith(f"refs/heads/{FIX_BRANCH_PREFIX}")
 
 
 def job_from_push(payload: dict[str, Any], delivery_id: str | None) -> ScanJob | None:
@@ -152,9 +161,7 @@ def job_from_push(payload: dict[str, Any], delivery_id: str | None) -> ScanJob |
     sender = payload.get("sender") or {}
     author = head.get("author") or {}
     login = author.get("username") or sender.get("login") or "unknown"
-    if payload["ref"].startswith(f"refs/heads/{FIX_BRANCH_PREFIX}") or is_bot(login) or \
-            is_bot(sender.get("login"), sender.get("type")):
-        return None  # the agent's own fix branches and bot pushes are not people's scores
+    bot = is_bot_push(login, payload["ref"]) or is_bot(sender.get("login"), sender.get("type"))
     same_as_sender = login == sender.get("login")
     before = payload.get("before")
     return ScanJob(
@@ -166,7 +173,7 @@ def job_from_push(payload: dict[str, Any], delivery_id: str | None) -> ScanJob |
         author_avatar=sender.get("avatar_url") if same_as_sender else None,
         author_name=author.get("name"), author_email=author.get("email"),
         commit_message=head.get("message", ""), commit_url=head.get("url"),
-        delivery_id=delivery_id,
+        delivery_id=delivery_id, skip_reason=BOT_SKIP_REASON if bot else None,
     )
 
 
@@ -180,8 +187,7 @@ def job_from_pull_request(payload: dict[str, Any], delivery_id: str | None) -> S
     if head_repo.get("id") == base_repo.get("id"):
         return None
     user = pr.get("user") or {}
-    if is_bot(user.get("login"), user.get("type")):
-        return None
+    bot = is_bot(user.get("login"), user.get("type"))
     return ScanJob(
         installation_id=int(payload["installation"]["id"]), repo=payload["repository"],
         event_type=EventType.PULL_REQUEST, after_sha=pr["head"]["sha"],
@@ -189,6 +195,7 @@ def job_from_pull_request(payload: dict[str, Any], delivery_id: str | None) -> S
         author_login=user.get("login", "unknown"), author_id=user.get("id"),
         author_avatar=user.get("avatar_url"), commit_message=pr.get("title", ""),
         commit_url=pr.get("html_url"), pr_number=int(pr["number"]), delivery_id=delivery_id,
+        skip_reason=BOT_SKIP_REASON if bot else None,
     )
 
 
@@ -447,6 +454,20 @@ async def run_scan(job: ScanJob, *, gh_transport: Any = None,
             PushEvent.status != ScanStatus.FAILED))).first()
         if duplicate:
             return None  # same commit already scanned (e.g. pushed to another branch)
+        if job.skip_reason:
+            # Bot pushes go straight to the feed as finished and unscored: no check run,
+            # no developer row, nothing for the leaderboard.
+            now = datetime.now(timezone.utc)
+            push = PushEvent(
+                team_id=team.id, repository_id=repo.id, delivery_id=job.delivery_id,
+                event_type=job.event_type, ref=job.ref, before_sha=job.before_sha,
+                after_sha=job.after_sha, pr_number=job.pr_number,
+                commit_message=job.commit_message[:10_000], commit_url=job.commit_url,
+                author_login=job.author_login, status=ScanStatus.COMPLETED,
+                started_at=now, completed_at=now, ai_summary=job.skip_reason)
+            session.add(push)
+            await session.flush()
+            return push.id
         dev = await upsert_developer(session, team, job)
         push = PushEvent(
             team_id=team.id, repository_id=repo.id, developer_id=dev.id,
@@ -520,6 +541,7 @@ async def resume_interrupted_scans(*, gh_transport: Any = None,
             col(PushEvent.status).in_([ScanStatus.QUEUED, ScanStatus.IN_PROGRESS]))
             .order_by(col(PushEvent.id)))).all()
         jobs: list[tuple[ScanJob, PushEvent]] = []
+        bot_checks: list[tuple[int, str, int]] = []  # (installation, full name, check run)
         for push in stuck:
             repo = await session.get(Repository, push.repository_id)
             team = await session.get(Team, push.team_id)
@@ -529,6 +551,16 @@ async def resume_interrupted_scans(*, gh_transport: Any = None,
                 push.error = "Interrupted by a server restart and could not be resumed."
                 push.completed_at = datetime.now(timezone.utc)
                 session.add(push)
+                continue
+            if is_bot_push(push.author_login, push.ref):
+                # Recorded before bots were skipped: finish it unscored instead of scanning.
+                push.status, push.conclusion = ScanStatus.COMPLETED, None
+                push.ai_summary = BOT_SKIP_REASON
+                push.completed_at = datetime.now(timezone.utc)
+                session.add(push)
+                if push.check_run_id:
+                    bot_checks.append((team.github_installation_id, repo.full_name,
+                                       push.check_run_id))
                 continue
             jobs.append((ScanJob(
                 installation_id=team.github_installation_id,
@@ -541,11 +573,27 @@ async def resume_interrupted_scans(*, gh_transport: Any = None,
                 pr_number=push.pr_number, delivery_id=push.delivery_id), push))
         resumed = [(job, p.id, p.repository_id, p.developer_id, p.check_run_id)
                    for job, p in jobs]
+    if bot_checks:
+        await _skip_check_runs(bot_checks, gh_transport)
     for job, push_id, repo_id, dev_id, check_run_id in resumed:
         logger.info("resuming interrupted scan of push %s", push_id)
         await _execute_scan(job, push_id, repo_id, dev_id, gh_transport=gh_transport,
                             scanner=scanner, check_run_id=check_run_id)
     return [r[1] for r in resumed]
+
+
+async def _skip_check_runs(checks: list[tuple[int, str, int]], gh_transport: Any) -> None:
+    """Close GitHub check runs left spinning on bot pushes (best effort)."""
+    async with GitHubApp(get_settings(), transport=gh_transport) as gh:
+        for installation_id, full_name, check_run_id in checks:
+            owner, name = full_name.split("/", 1)
+            try:
+                token = await gh.installation_token(installation_id)
+                await gh.complete_check_run(token, owner, name, check_run_id,
+                                            conclusion="skipped", title="Bot push not scanned",
+                                            summary="Pushes by bots are not scanned or scored.")
+            except Exception:  # never block startup on GitHub
+                logger.exception("could not close check run %s", check_run_id)
 
 
 async def _scan_locked(gh: GitHubApp, token: str, job: ScanJob, push_id: int, repo_id: int,
