@@ -642,7 +642,8 @@ def build_scanner(settings: Settings) -> AIScanner:
     return AIScanner(llm, context_chars=settings.llm_context_chars,
                      agent_enabled=settings.agent_enabled,
                      agent_max_steps=settings.agent_max_steps,
-                     agent_llm=llm.with_primary_model(settings.llm_agent_model))
+                     agent_llm=llm.variant(model=settings.llm_agent_model,
+                                           thinking=settings.llm_agent_thinking))
 
 
 async def run_fixes(gh: GitHubApp, token: str, owner: str, name: str, job: ScanJob,

@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     # Optional faster model for the agent's investigation turns (same endpoint as LLM_MODEL),
     # e.g. nvidia/nemotron-3.5-lightning-30b-a3b. Empty = use LLM_MODEL everywhere.
     llm_agent_model: str = ""
+    # Model "thinking" (hidden reasoning before each answer). On for the skeptic and fixer,
+    # where judgement matters; off for the agent's tool-choosing turns, which are mechanical
+    # and become several times faster. Only sent to OpenAI-compatible servers that support
+    # chat_template_kwargs (NVIDIA NIM, vLLM).
+    llm_thinking: bool = True
+    llm_agent_thinking: bool = False
     agent_max_steps: int = Field(default=10, ge=2, le=30)
     agent_fix_enabled: bool = True
     # Opening fix PRs needs the App's Contents and Pull requests permissions set to write.

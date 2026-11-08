@@ -65,12 +65,15 @@ def extract_json_object(text: str) -> dict[str, Any] | None:
 
 class LLMClient:
     def __init__(self, endpoints: list[LLMEndpoint], *, timeout: float = 90.0,
-                 max_tokens: int = 4096, transport: httpx.AsyncBaseTransport | None = None
-                 ) -> None:
+                 max_tokens: int = 4096, transport: httpx.AsyncBaseTransport | None = None,
+                 thinking: bool = True) -> None:
         self.endpoints = [e for e in endpoints if e.base_url and e.api_key and e.model]
         self.timeout = timeout
         self.max_tokens = max_tokens
         self._transport = transport
+        # Nemotron reasons ("thinks") before answering by default. Turning it off cuts a call
+        # from ~3-5s to under 1s on NVIDIA's API; worth it where the step is mechanical.
+        self.thinking = thinking
 
     @classmethod
     def from_settings(cls, settings: Settings | None = None,
@@ -80,17 +83,19 @@ class LLMClient:
             [LLMEndpoint(s.llm_base_url, s.llm_api_key, s.llm_model),
              LLMEndpoint(s.llm_fallback_base_url, s.llm_fallback_api_key, s.llm_fallback_model)],
             timeout=s.llm_timeout_seconds, max_tokens=s.llm_max_tokens, transport=transport,
+            thinking=s.llm_thinking,
         )
 
-    def with_primary_model(self, model: str) -> LLMClient:
-        """Same endpoints and limits, but the first endpoint uses ``model`` (fallbacks unchanged).
-        Used to give the agent's many short investigation turns a faster model."""
-        if not model or not self.endpoints:
-            return self
-        first, *rest = self.endpoints
-        return LLMClient([LLMEndpoint(first.base_url, first.api_key, model), *rest],
-                         timeout=self.timeout, max_tokens=self.max_tokens,
-                         transport=self._transport)
+    def variant(self, *, model: str = "", thinking: bool | None = None) -> LLMClient:
+        """Same endpoints and limits, optionally with a different primary model (fallbacks
+        unchanged) and/or thinking switched. Used to tune the agent's many short turns."""
+        endpoints = self.endpoints
+        if model and endpoints:
+            first, *rest = endpoints
+            endpoints = [LLMEndpoint(first.base_url, first.api_key, model), *rest]
+        return LLMClient(endpoints, timeout=self.timeout, max_tokens=self.max_tokens,
+                         transport=self._transport,
+                         thinking=self.thinking if thinking is None else thinking)
 
     @property
     def available(self) -> bool:
@@ -99,8 +104,11 @@ class LLMClient:
     async def _chat(self, client: httpx.AsyncClient, endpoint: LLMEndpoint,
                     messages: list[dict[str, str]], temperature: float) -> str:
         url = endpoint.base_url.rstrip("/") + "/chat/completions"
-        body = {"model": endpoint.model, "messages": messages, "temperature": temperature,
-                "top_p": 0.9, "max_tokens": self.max_tokens}
+        body: dict[str, Any] = {"model": endpoint.model, "messages": messages,
+                                "temperature": temperature, "top_p": 0.9,
+                                "max_tokens": self.max_tokens}
+        if not self.thinking:  # NIM / vLLM chat-template switch (Nemotron, Qwen, ...)
+            body["chat_template_kwargs"] = {"enable_thinking": False}
         headers = {"Authorization": f"Bearer {endpoint.api_key}", "Accept": "application/json"}
         for attempt in range(2):
             resp = await client.post(url, json=body, headers=headers)

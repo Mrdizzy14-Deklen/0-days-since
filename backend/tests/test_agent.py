@@ -141,14 +141,17 @@ async def test_agent_can_use_a_faster_model_than_the_skeptic() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
+        thinking_off = body.get("chat_template_kwargs") == {"enable_thinking": False}
         if "adversarial skeptic" in body["messages"][0]["content"]:
+            assert not thinking_off  # the skeptic keeps reasoning
             models["skeptic"].add(body["model"])
             return _reply({"verdicts": []})
+        assert thinking_off  # agent turns skip it
         models["agent"].add(body["model"])
         return _reply({"summary": "direct", "vulnerabilities": []})
 
     llm = _client(handler)
-    scanner = AIScanner(llm, agent_llm=llm.with_primary_model("nemotron-lightning"))
+    scanner = AIScanner(llm, agent_llm=llm.variant(model="nemotron-lightning", thinking=False))
     result = await scanner.scan(_input(graph, _db_change(graph)))
     assert models == {"agent": {"nemotron-lightning"}, "skeptic": {"nemotron-agent"}}
     assert result.agent is not None and result.agent.model == "nemotron-lightning"
