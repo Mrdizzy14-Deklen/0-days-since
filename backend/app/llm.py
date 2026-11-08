@@ -109,13 +109,19 @@ class LLMClient:
 
     async def complete_json(self, system: str, user: str, *, temperature: float = 0.1
                             ) -> LLMReply:
+        return await self.complete_json_messages(
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            temperature=temperature)
+
+    async def complete_json_messages(self, conversation: list[dict[str, str]], *,
+                                     temperature: float = 0.1) -> LLMReply:
+        """Multi-turn variant (used by the agent loop): the reply must be one JSON object."""
         if not self.endpoints:
             raise LLMError("no LLM endpoint configured")
         errors: list[str] = []
         async with httpx.AsyncClient(timeout=self.timeout, transport=self._transport) as client:
             for endpoint in self.endpoints:
-                messages = [{"role": "system", "content": system},
-                            {"role": "user", "content": user}]
+                messages = list(conversation)
                 try:
                     raw = await self._chat(client, endpoint, messages, temperature)
                     data = extract_json_object(raw)

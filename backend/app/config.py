@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 4096
     llm_context_chars: int = Field(default=60_000, ge=4_000)
 
+    # Nemotron agent: Pass 1 becomes a plan -> tool calls -> report loop over the code graph,
+    # and confirmed vulnerabilities get an auto-fix that is re-scanned before a PR is opened.
+    agent_enabled: bool = True
+    agent_max_steps: int = Field(default=10, ge=2, le=30)
+    agent_fix_enabled: bool = True
+    # Opening fix PRs needs the App's Contents and Pull requests permissions set to write.
+    agent_open_fix_prs: bool = False
+    agent_max_fixes: int = Field(default=2, ge=0, le=10)
+
     # Scanner limits (guard against hostile / gigantic repositories)
     max_python_files: int = Field(default=5000, ge=1)
     max_file_bytes: int = Field(default=1_000_000, ge=1)

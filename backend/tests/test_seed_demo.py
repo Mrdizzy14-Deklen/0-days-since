@@ -53,6 +53,13 @@ async def test_seed_replays_scenario(db: None) -> None:
     sqli_push = next(p for p in pushes if p.commit_message == "Invoice search by customer email")
     paths = sqli_push.blast_radius["taint_paths"]
     assert paths and paths[0]["cross_file"] and "sql" in paths[0]["sink_kinds"]
+    # the scripted agent investigated with real tool calls, then fixed and verified the SQLi
+    investigation = sqli_push.agent_trace["investigation"]
+    assert [st["action"] for st in investigation["steps"]] == [
+        "symbol", "trace", "read_code", "finish"]
+    assert "app/services/billing.py" in investigation["steps"][2]["observation"]
+    fix = sqli_push.agent_trace["fixes"][0]
+    assert fix["verified"] and "db.fetch_all(" in fix["diff"] and fix["pr_url"] is None
 
     assert await purge_demo_team()
     async with session_scope() as s:

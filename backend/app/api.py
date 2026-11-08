@@ -323,6 +323,7 @@ async def push_detail(push_id: int, session: SessionDep, principal: PrincipalDep
         "quality_metrics": push.quality_metrics,
         "blast_radius": radius,
         "incident_scope": incident_scope,
+        "agent": push.agent_trace or {},
     }
 
 

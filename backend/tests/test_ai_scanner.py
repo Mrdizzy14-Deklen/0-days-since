@@ -77,7 +77,7 @@ async def test_two_pass_flow_with_guardrails() -> None:
                                         "title": "Name", "message": "rename cur"}]},
         }
 
-    scanner = AIScanner(_client(llm_transport(responder, calls)))
+    scanner = AIScanner(_client(llm_transport(responder, calls)), agent_enabled=False)
     result = await scanner.scan(_input(graph, _db_change(graph)))
     assert result.ai_used and result.model == "nemotron-test" and len(calls) == 2
     sec = {f.candidate_id: f for f in result.findings if f.candidate_id}

@@ -203,6 +203,32 @@ class GitHubApp:
             final["details_url"] = details_url
         await self._request("PATCH", url, token=token, json=final)
 
+    async def open_pull_request_with_files(
+            self, token: str, owner: str, repo: str, *, base_branch: str, base_sha: str,
+            branch: str, files: dict[str, str], commit_message: str, title: str, body: str,
+    ) -> tuple[int, str]:
+        """Commit ``files`` on top of ``base_sha`` in a new branch and open a pull request.
+
+        Needs the App's Contents and Pull requests permissions set to write.
+        """
+        base = await self._request("GET", f"/repos/{owner}/{repo}/git/commits/{base_sha}",
+                                   token=token)
+        tree = await self._request("POST", f"/repos/{owner}/{repo}/git/trees", token=token, json={
+            "base_tree": base.json()["tree"]["sha"],
+            "tree": [{"path": path, "mode": "100644", "type": "blob", "content": content}
+                     for path, content in sorted(files.items())],
+        })
+        commit = await self._request("POST", f"/repos/{owner}/{repo}/git/commits", token=token,
+                                     json={"message": commit_message,
+                                           "tree": tree.json()["sha"], "parents": [base_sha]})
+        await self._request("POST", f"/repos/{owner}/{repo}/git/refs", token=token,
+                            json={"ref": f"refs/heads/{branch}", "sha": commit.json()["sha"]})
+        pr = await self._request("POST", f"/repos/{owner}/{repo}/pulls", token=token, json={
+            "title": title, "head": branch, "base": base_branch, "body": body,
+            "maintainer_can_modify": True})
+        data = pr.json()
+        return int(data["number"]), str(data["html_url"])
+
     async def compare(self, token: str, owner: str, repo: str, base: str, head: str
                       ) -> Comparison:
         files: list[ChangedFile] = []

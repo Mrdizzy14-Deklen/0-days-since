@@ -32,6 +32,7 @@ from app.enums import (
     MemberRole,
     ScanStatus,
 )
+from app.fixer import FixAgent, FixProposal, fixable
 from app.github_app import NULL_SHA, GitHubApp, GitHubError
 from app.models import (
     CodeEdge,
@@ -423,7 +424,10 @@ async def run_scan(job: ScanJob, *, gh_transport: Any = None,
 
             async with graph_cache.lock(repo_id):
                 await _scan_locked(gh, token, job, push_id, repo_id, dev_id, settings,
-                                   scanner or AIScanner(context_chars=settings.llm_context_chars),
+                                   scanner or AIScanner(
+                                       context_chars=settings.llm_context_chars,
+                                       agent_enabled=settings.agent_enabled,
+                                       agent_max_steps=settings.agent_max_steps),
                                    owner, name, check_run_id, details_url)
         except Exception as exc:
             logger.exception("scan failed for push %s", push_id)
@@ -541,6 +545,7 @@ async def _scan_locked(gh: GitHubApp, token: str, job: ScanJob, push_id: int, re
         commit_message=job.commit_message, repo_full_name=job.repo["full_name"],
     ))
     craft = craft_subscores(quality, result.craft_adjustment)
+    fixes = await run_fixes(gh, token, owner, name, job, graph, result, settings, scanner)
 
     # ---- 4. scoring + persistence -------------------------------------------------------
     async with session_scope() as session:
@@ -574,6 +579,10 @@ async def _scan_locked(gh: GitHubApp, token: str, job: ScanJob, push_id: int, re
         push.ai_summary = result.summary
         push.llm_model = result.model
         push.blast_radius = radius.to_dict()
+        push.agent_trace = {
+            "investigation": result.agent.to_dict() if result.agent else None,
+            "fixes": [f.to_dict() for f in fixes],
+        }
         if result.errors:
             push.error = "; ".join(result.errors)[:4000]
         for f in result.findings:
@@ -590,12 +599,74 @@ async def _scan_locked(gh: GitHubApp, token: str, job: ScanJob, push_id: int, re
     # ---- 5. GitHub check -------------------------------------------------------------
     title, summary, text = build_check_output(job, result, score, radius, details_url,
                                               settings)
+    text = (text + fix_section(fixes)).strip()[:60_000]
     await gh.complete_check_run(token, owner, name, check_run_id,
                                 conclusion=score.conclusion.value, title=title, summary=summary,
                                 text=text,
                                 annotations=select_annotations(result.findings,
                                                                settings.max_annotations),
                                 details_url=details_url)
+
+
+# --------------------------------------------------------------------------------------
+# Agent auto-fix
+# --------------------------------------------------------------------------------------
+
+
+async def run_fixes(gh: GitHubApp, token: str, owner: str, name: str, job: ScanJob,
+                    graph: ProjectGraph, result: ScanResult, settings: Settings,
+                    scanner: AIScanner) -> list[FixProposal]:
+    """Propose + verify a patch per confirmed vulnerability; open PRs for verified ones."""
+    if not (settings.agent_fix_enabled and result.ai_used and scanner.llm.available):
+        return []
+    targets = fixable(result.findings)[:settings.agent_max_fixes]
+    if not targets:
+        return []
+    fixer = FixAgent(scanner.llm)
+    branch = (job.ref or "").removeprefix("refs/heads/")
+    # PRs only for branch pushes we can write to (not fork pull requests).
+    can_open = settings.agent_open_fix_prs and job.event_type is EventType.PUSH and bool(branch)
+    proposals: list[FixProposal] = []
+    for i, finding in enumerate(targets, start=1):
+        proposal = await fixer.propose(graph, finding)
+        if proposal is None:
+            continue
+        if proposal.verified and can_open:
+            try:
+                proposal.pr_number, proposal.pr_url = await gh.open_pull_request_with_files(
+                    token, owner, name, base_branch=branch, base_sha=job.after_sha,
+                    branch=f"zeroday/fix-{job.after_sha[:7]}-{i}",
+                    files=proposal.new_sources,
+                    commit_message=proposal.commit_message,
+                    title=f"🛡️ {proposal.commit_message}",
+                    body=fix_pr_body(job, finding, proposal))
+            except GitHubError as exc:
+                proposal.error = f"could not open PR: {exc}"
+                logger.warning("fix PR failed: %s", exc)
+        proposals.append(proposal)
+    return proposals
+
+
+def fix_pr_body(job: ScanJob, finding: ScanFinding, proposal: FixProposal) -> str:
+    return (f"Automated fix proposed by the 0 Days Since Nemotron agent for "
+            f"**{finding.title}** ({finding.cwe or finding.rule_id}, {finding.severity.value}) "
+            f"introduced in {job.after_sha[:7]}.\n\n**What changed:** {proposal.explanation}"
+            f"\n\n**How it was checked:** {proposal.verification}\n\n"
+            "Review it like any other PR before merging.")
+
+
+def fix_section(fixes: list[FixProposal]) -> str:
+    if not fixes:
+        return ""
+    lines = ["", "### 🤖 Agent fixes"]
+    for f in fixes:
+        if f.pr_url:
+            lines.append(f"- ✅ [PR #{f.pr_number}]({f.pr_url}): {f.commit_message}")
+        elif f.verified:
+            lines.append(f"- ✅ Verified fix ready (see dashboard): {f.commit_message}")
+        else:
+            lines.append(f"- ⚠️ {f.finding_title}: {f.error or f.verification or 'not verified'}")
+    return "\n".join(lines) + "\n"
 
 
 # --------------------------------------------------------------------------------------

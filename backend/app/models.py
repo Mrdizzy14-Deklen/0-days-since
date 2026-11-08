@@ -301,6 +301,8 @@ class PushEvent(SQLModel, table=True):
     ai_summary: str | None = Field(default=None, sa_type=sa.Text)
     llm_model: str | None = Field(default=None, max_length=200)
     blast_radius: dict[str, Any] = Field(default_factory=dict, sa_type=_json())
+    # Nemotron agent: {"investigation": {plan, steps, ...}, "fixes": [FixProposal...]}
+    agent_trace: dict[str, Any] = Field(default_factory=dict, sa_type=_json())
 
     created_at: datetime = Field(default_factory=utcnow, sa_type=_tz(), nullable=False)
 

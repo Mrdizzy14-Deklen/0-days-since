@@ -242,3 +242,62 @@ async def test_webhook_endpoint(db: None, monkeypatch: pytest.MonkeyPatch) -> No
         assert ok.status_code == 202 and ok.json()["queued"] == "scan"
     assert len(queued) == 1 and queued[0].author_login == "alice"
     assert queued[0].delivery_id == "abc"
+
+
+async def test_agent_opens_verified_fix_pr(db: None, gh: FakeGitHub,
+                                           monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.config import get_settings
+    from app.fixer import FIX_SYSTEM
+    from app.llm import LLMEndpoint
+
+    monkeypatch.setenv("AGENT_OPEN_FIX_PRS", "true")
+    get_settings.cache_clear()
+    src = FILES_B["app/db.py"].split("\n")
+    q = next(i for i, line in enumerate(src, start=1) if 'query = f"SELECT' in line)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        messages = json.loads(request.content)["messages"]
+        system = messages[0]["content"]
+        if "adversarial skeptic" in system:
+            ids = [c["id"] for c in json.loads(
+                messages[1]["content"].split("## Candidates to verify\n", 1)[1]
+                .split("\n\n## Cross-file", 1)[0])]
+            reply: dict[str, Any] = {"verdicts": [
+                {"id": i, "verdict": "confirmed", "confidence": 0.9, "reasoning": "unsanitized"}
+                for i in ids]}
+        elif system == FIX_SYSTEM:
+            reply = {"explanation": "Bind the id.", "commit_message": "Bind user id in fetch_user",
+                     "edits": [{"file_path": "app/db.py", "start_line": q, "end_line": q + 2,
+                                "replacement": "        cur = self.conn.cursor()\n"
+                                "        cur.execute(\"SELECT * FROM users WHERE id = ?\", "
+                                "(user_id,))"}]}
+        else:  # agent: report straight away
+            reply = {"action": "finish", "args": {"report": {
+                "summary": "Formatted SQL in fetch_user.", "vulnerabilities": []}}}
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(reply)}}]})
+
+    scanner = AIScanner(LLMClient([LLMEndpoint("https://llm.test/v1", "k", "nemotron")],
+                                  transport=httpx.MockTransport(handler)))
+    await handle_installation_event("installation", {
+        "action": "created",
+        "installation": {"id": 77, "account": {"login": "acme", "id": 1, "type": "Organization"}},
+        "repositories": [{"id": 555, "name": "api", "full_name": "acme/api"}],
+    }, transport=gh.transport)
+    job = job_from_push(push_payload(SHA_A, SHA_B, "Add user lookup"), "d-fix")
+    assert job is not None
+    push_id = await run_scan(job, gh_transport=gh.transport, scanner=scanner)
+
+    assert len(gh.pulls) == 1
+    pr = gh.pulls[0]
+    assert pr["base"] == "main" and pr["head"] == f"zeroday/fix-{SHA_B[:7]}-1"
+    fixed_sha = gh.refs[f"refs/heads/{pr['head']}"]
+    assert 'WHERE id = ?", (user_id,))' in gh.commits[fixed_sha]["app/db.py"]
+    async with session_scope() as s:
+        push = await s.get(PushEvent, push_id)
+        assert push is not None and push.conclusion is CheckConclusion.FAILURE
+        fix = push.agent_trace["fixes"][0]
+        assert fix["verified"] and fix["pr_url"].endswith("/pull/1")
+        assert push.agent_trace["investigation"]["finished"]
+    text = next(iter(gh.check_runs.values()))["output"]["text"]
+    assert "Agent fixes" in text and "PR #1" in text
+    get_settings.cache_clear()

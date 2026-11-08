@@ -326,6 +326,9 @@ class AIScript:
     docs: int = 0
     readability: int = 0
     type_hints: int = 0
+    # Scripted agent auto-fix: {"explanation", "commit_message",
+    #   "edits": [{"file_path", "needle", "end_needle", "replacement"}]}
+    fix: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -459,7 +462,20 @@ STEPS: list[Step] = [
                        "through billing.py:search_invoices into db.conn.execute(); no validation "
                        "or parameter binding on the path, and `str` parameters accept quotes.",
         notes="New method skips the parameterized db helpers and lacks a docstring.",
-        docs=-4, readability=-3), CheckConclusion.FAILURE),
+        docs=-4, readability=-3,
+        fix={"explanation": "Passes customer and status as bound parameters through "
+                            "db.fetch_all instead of formatting them into the SQL string, so "
+                            "quotes in the input can no longer change the query.",
+             "commit_message": "Use bound parameters in search_invoices",
+             "edits": [{"file_path": "app/services/billing.py",
+                        "needle": 'query = f"SELECT * FROM invoices WHERE customer_email',
+                        "end_needle": "rows = db.conn.execute(query).fetchall()",
+                        "replacement": '        rows = db.fetch_all(\n'
+                                       '            "SELECT * FROM invoices WHERE '
+                                       'customer_email = ? AND status = ?",\n'
+                                       '            (customer, status),\n'
+                                       '        )'}]}),
+        CheckConclusion.FAILURE),
 
     Step("priya-natarajan", 3.0, "Nightly export archives for admins", [
         Edit("app/services/reports.py", old='import csv\nimport io\n',

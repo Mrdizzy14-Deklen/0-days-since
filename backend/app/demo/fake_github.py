@@ -32,6 +32,9 @@ class FakeGitHub:
         self.check_runs: dict[int, dict[str, Any]] = {}
         self.patches: list[tuple[int, dict[str, Any]]] = []
         self._next_check = 1000
+        self.trees: dict[str, dict[str, str]] = {}
+        self.refs: dict[str, str] = {}
+        self.pulls: list[dict[str, Any]] = []
 
     def commit(self, sha: str, files: dict[str, str]) -> None:
         self.commits[sha] = dict(files)
@@ -80,6 +83,35 @@ class FakeGitHub:
                 body.get("output", {}).get("annotations", []))
             run["output"] = body.get("output")
             return httpx.Response(200, json={"id": run_id})
+        if method == "GET" and path.startswith(f"{prefix}/git/commits/"):
+            sha = path.rsplit("/", 1)[1]
+            if sha not in self.commits:
+                return httpx.Response(404, json={"message": "Not Found"})
+            self.trees.setdefault(f"tree-{sha}", dict(self.commits[sha]))
+            return httpx.Response(200, json={"sha": sha, "tree": {"sha": f"tree-{sha}"}})
+        if method == "POST" and path == f"{prefix}/git/trees":
+            body = json.loads(request.content)
+            files = dict(self.trees.get(body.get("base_tree"), {}))
+            files.update({e["path"]: e["content"] for e in body["tree"]})
+            sha = f"tree-{blob_sha(json.dumps(files, sort_keys=True))}"
+            self.trees[sha] = files
+            return httpx.Response(201, json={"sha": sha})
+        if method == "POST" and path == f"{prefix}/git/commits":
+            body = json.loads(request.content)
+            sha = blob_sha(body["tree"] + body["message"])
+            self.commit(sha, self.trees[body["tree"]])
+            return httpx.Response(201, json={"sha": sha})
+        if method == "POST" and path == f"{prefix}/git/refs":
+            body = json.loads(request.content)
+            self.refs[body["ref"]] = body["sha"]
+            return httpx.Response(201, json={"ref": body["ref"]})
+        if method == "POST" and path == f"{prefix}/pulls":
+            body = json.loads(request.content)
+            number = len(self.pulls) + 1
+            self.pulls.append({**body, "number": number})
+            return httpx.Response(201, json={
+                "number": number,
+                "html_url": f"https://github.com/{self.owner}/{self.repo}/pull/{number}"})
         if method == "GET" and path.startswith(f"{prefix}/git/trees/"):
             files = self.commits.get(path.rsplit("/", 1)[1])
             if files is None:
