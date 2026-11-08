@@ -121,7 +121,7 @@ async def test_migration_splits_a_merged_team(db: None, gh: FakeGitHub) -> None:
     async with session_scope() as s:
         teams = (await s.exec(select(Team).order_by(Team.github_repo_id))).all()
         assert [(t.name, t.slug, t.github_repo_id) for t in teams] == [
-            ("alpha", "acme", 700), ("beta", "beta", 701)]  # the old URL keeps working
+            ("alpha", "alpha", 700), ("beta", "beta", 701)]
         team_repo = {t.id: t.github_repo_id for t in teams}
         assert snapshot((await s.exec(select(Developer))).all()) == expected
         for t in teams:
@@ -136,3 +136,106 @@ async def test_migration_splits_a_merged_team(db: None, gh: FakeGitHub) -> None:
             assert len(snaps) == 2 and {x.developer_id for x in snaps} == {dev.id}
             assert (await s.exec(select(TeamIntegration).where(
                 TeamIntegration.team_id == t.id))).one().discord_webhook_url
+
+
+async def test_migration_merges_a_repository_split_by_a_reinstall(db: None,
+                                                                   gh: FakeGitHub) -> None:
+    """Uninstall + reinstall left the same repository under two account-named teams."""
+    from app.migrations import split_multi_repo_teams
+    from app.models import Finding, ScoreSnapshot
+
+    transport = _any_repo(gh)
+    for rid, name, before, after, d in ((800, "test", SHA_A, SHA_B, "t1"),
+                                        (800, "test", SHA_B, SHA_C, "t2"),
+                                        (801, "app", SHA_A, SHA_B, "a1")):
+        await run_scan(_repo_push(rid, name, before, after, d),
+                       gh_transport=transport, scanner=_deterministic())
+
+    async with session_scope() as s:
+        expected = {t.name: (d.total_pushes, d.faulty_pushes, d.composite_score)
+                    for t, d in (await s.exec(select(Team, Developer).join(
+                        Developer, Developer.team_id == Team.id))).all()}
+        test_team = (await s.exec(select(Team).where(Team.github_repo_id == 800))).one()
+        app_team = (await s.exec(select(Team).where(Team.github_repo_id == 801))).one()
+        test_repo = (await s.exec(select(Repository).where(
+            Repository.github_repo_id == 800))).one()
+        first_push = (await s.exec(select(PushEvent).where(
+            PushEvent.repository_id == test_repo.id).order_by(PushEvent.id))).first()
+        # old install: an account-named team holding a stale copy of "test" and its first push
+        old = Team(name="Me", slug="me", github_installation_id=1, installation_suspended=True)
+        s.add(old)
+        await s.flush()
+        old_repo = Repository(team_id=old.id, github_repo_id=800, owner="acme", name="test",
+                              full_name="acme/test", is_active=False)
+        s.add(old_repo)
+        await s.flush()
+        old_dev = Developer(team_id=old.id, github_login="alice", total_pushes=9)
+        s.add(old_dev)
+        await s.flush()
+        first_push.team_id, first_push.repository_id = old.id, old_repo.id
+        first_push.developer_id = old_dev.id
+        for f in (await s.exec(select(Finding).where(
+                Finding.push_event_id == first_push.id))).all():
+            f.repository_id = old_repo.id
+            s.add(f)
+        for snap in (await s.exec(select(ScoreSnapshot).where(
+                ScoreSnapshot.push_event_id == first_push.id))).all():
+            snap.team_id, snap.developer_id = old.id, old_dev.id
+            s.add(snap)
+        s.add(first_push)
+        # new install: "test" and "app" folded into one account-named team
+        app_dev = (await s.exec(select(Developer).where(
+            Developer.team_id == app_team.id))).one()
+        for row in (await s.exec(select(PushEvent).where(PushEvent.team_id == app_team.id))).all():
+            row.team_id, row.developer_id = test_team.id, None
+            s.add(row)
+        for row in (await s.exec(select(ScoreSnapshot).where(
+                ScoreSnapshot.team_id == app_team.id))).all():
+            row.team_id = test_team.id
+            s.add(row)
+        app_repo = (await s.exec(select(Repository).where(
+            Repository.team_id == app_team.id))).one()
+        app_repo.team_id = test_team.id
+        s.add(app_repo)
+        await s.flush()
+        new_dev = (await s.exec(select(Developer).where(
+            Developer.team_id == test_team.id))).one()
+        for row in (await s.exec(select(PushEvent).where(
+                PushEvent.team_id == test_team.id))).all():
+            row.developer_id = new_dev.id
+            s.add(row)
+        for row in (await s.exec(select(ScoreSnapshot).where(
+                ScoreSnapshot.developer_id == app_dev.id))).all():
+            row.developer_id = new_dev.id
+            s.add(row)
+        await s.flush()
+        await s.delete(app_dev)
+        await s.flush()
+        await s.delete(app_team)
+        test_team.name, test_team.slug, test_team.github_repo_id = "Me", "me-2", None
+        test_team.github_installation_id = 2
+        s.add(test_team)
+
+    async with session_scope() as s:
+        await split_multi_repo_teams(s)
+    async with session_scope() as s:
+        await split_multi_repo_teams(s)  # idempotent
+
+    async with session_scope() as s:
+        teams = (await s.exec(select(Team).order_by(Team.github_repo_id))).all()
+        assert [(t.name, t.slug, t.github_repo_id, t.github_installation_id,
+                 t.installation_suspended) for t in teams] == [
+            ("test", "test", 800, 2, False), ("app", "app", 801, 2, False)]
+        repos = (await s.exec(select(Repository).order_by(Repository.github_repo_id))).all()
+        assert [(r.github_repo_id, r.team_id) for r in repos] == [
+            (800, teams[0].id), (801, teams[1].id)]
+        assert {t.name: (d.total_pushes, d.faulty_pushes, d.composite_score)
+                for t, d in (await s.exec(select(Team, Developer).join(
+                    Developer, Developer.team_id == Team.id))).all()} == expected
+        for team, repo, n in ((teams[0], repos[0], 2), (teams[1], repos[1], 1)):
+            pushes = (await s.exec(select(PushEvent).where(PushEvent.team_id == team.id))).all()
+            assert len(pushes) == n and {p.repository_id for p in pushes} == {repo.id}
+            assert len((await s.exec(select(ScoreSnapshot).where(
+                ScoreSnapshot.team_id == team.id))).all()) == n
+        assert {f.repository_id for f in (await s.exec(select(Finding))).all()} <= {
+            r.id for r in repos}

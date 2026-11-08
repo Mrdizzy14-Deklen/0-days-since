@@ -1,10 +1,15 @@
 """Startup migrations for databases created before teams became one-per-repository.
 
 ``create_all`` never alters an existing table, so the schema step adds ``teams.github_repo_id``
-and drops the old one-team-per-installation unique index. The data step then splits every team
-that still covers several repositories: each repository gets its own team (its pushes, score
-history and Discord settings move with it) and developer scores are rebuilt from the stored
-pushes, since each team keeps its own leaderboard.
+and drops the old one-team-per-installation unique index.
+
+The data step then regroups every legacy team (one per installation, named after the account)
+into one team per repository. A repository can appear under several legacy teams when the App
+was reinstalled (each installation got its own team), so its rows are merged first: pushes and
+findings move to the newest repository row, and that repository's team keeps all of them.
+Teams are renamed after their repository, Discord settings carry over, emptied legacy teams
+are removed, and developer scores are rebuilt by replaying the stored pushes, since each team
+keeps its own leaderboard.
 
 Both steps are idempotent: a database that is already split is left untouched.
 """
@@ -12,19 +17,23 @@ Both steps are idempotent: a database that is already split is left untouched.
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlmodel import col, select
+from sqlmodel import col, delete, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.ai_scanner import ScanFinding
 from app.config import get_settings
 from app.db import get_engine, session_scope
 from app.models import (
+    CodeEdge,
+    CodeSymbol,
     Developer,
     Finding,
     PushEvent,
+    RepoFile,
     Repository,
     ScoreSnapshot,
     Team,
@@ -40,6 +49,8 @@ _AGGREGATES = ("total_pushes", "faulty_pushes", "weighted_fault_sum", "security_
                "cwe_counts", "smell_counts", "top_cwe", "top_smell", "last_push_at")
 _PROFILE = ("github_id", "display_name", "email", "avatar_url", "role",
             "linked_dashboard_account")
+_ACCOUNT = ("github_installation_id", "github_account_login", "github_account_id",
+            "github_account_type", "installation_suspended")
 
 
 async def migrate() -> None:
@@ -58,9 +69,10 @@ async def _migrate_schema(engine: AsyncEngine) -> None:
         columns, indexes = await conn.run_sync(inspect_teams)
         if "github_repo_id" not in columns:
             await conn.execute(text("ALTER TABLE teams ADD COLUMN github_repo_id BIGINT"))
+            logger.info("migration: added teams.github_repo_id")
+        if "ix_teams_github_repo_id" not in indexes:
             await conn.execute(text(
                 "CREATE UNIQUE INDEX ix_teams_github_repo_id ON teams (github_repo_id)"))
-            logger.info("migration: added teams.github_repo_id")
         if indexes.get("ix_teams_github_installation_id"):
             await conn.execute(text("DROP INDEX ix_teams_github_installation_id"))
             await conn.execute(text("CREATE INDEX ix_teams_github_installation_id "
@@ -71,69 +83,106 @@ async def _migrate_schema(engine: AsyncEngine) -> None:
 async def split_multi_repo_teams(session: AsyncSession) -> None:
     from app.pipeline import unique_team_slug  # pipeline imports are heavy; keep this lazy
 
-    legacy = (await session.exec(select(Team).where(
+    legacy = {t.id: t for t in (await session.exec(select(Team).where(
         col(Team.github_installation_id).is_not(None),
-        col(Team.github_repo_id).is_(None)))).all()
-    for team in legacy:
-        repos = (await session.exec(select(Repository).where(
-            Repository.team_id == team.id).order_by(col(Repository.id)))).all()
-        if not repos:
-            continue
-        integration = (await session.exec(select(TeamIntegration).where(
-            TeamIntegration.team_id == team.id))).first()
-        first, *others = repos
-        team.name, team.github_repo_id = first.name, first.github_repo_id
-        session.add(team)
-        teams = [team]
-        for repo in others:
-            new = Team(name=repo.name, github_repo_id=repo.github_repo_id,
-                       slug=await unique_team_slug(session, repo.owner, repo.name,
-                                                   repo.github_repo_id),
-                       github_installation_id=team.github_installation_id,
-                       github_account_login=team.github_account_login,
-                       github_account_id=team.github_account_id,
-                       github_account_type=team.github_account_type,
-                       installation_suspended=team.installation_suspended)
-            session.add(new)
+        col(Team.github_repo_id).is_(None)))).all()}
+    if not legacy:
+        return
+    repos = (await session.exec(select(Repository).where(
+        col(Repository.team_id).in_(list(legacy))).order_by(col(Repository.id)))).all()
+    groups: dict[int, list[Repository]] = defaultdict(list)
+    for repo in repos:
+        groups[repo.github_repo_id].append(repo)
+    integrations = {i.team_id: i for i in (await session.exec(select(TeamIntegration).where(
+        col(TeamIntegration.team_id).in_(list(legacy))))).all()}
+    public = get_settings().public_team_slugs
+
+    assigned: dict[int, Team] = {}  # team id -> team now owning one repository
+    for repo_id, rows in groups.items():
+        # The newest active row is the repository as the current installation knows it.
+        canonical = max(rows, key=lambda r: (r.is_active, r.id))
+        for dup in rows:
+            if dup.id != canonical.id:
+                await _merge_repository(session, dup, canonical)
+        source = legacy[canonical.team_id]
+        candidates = sorted({r.team_id for r in rows} - set(assigned))
+        if candidates:
+            team = legacy[candidates[0]]  # the oldest team of this repository
+        else:
+            team = Team(name=canonical.name, slug=f"tmp-{repo_id}")
+            session.add(team)
+        for field in _ACCOUNT:
+            setattr(team, field, getattr(source, field))
+        team.name, team.github_repo_id = canonical.name, repo_id
+        if team.slug not in public:
+            team.slug = f"tmp-{repo_id}"  # free the old slug before choosing a new one
             await session.flush()
-            repo.team_id = new.id
-            session.add(repo)
-            for push in (await session.exec(select(PushEvent).where(
-                    PushEvent.repository_id == repo.id))).all():
-                push.team_id = new.id
-                session.add(push)
-            if integration is not None:
-                session.add(TeamIntegration(
-                    team_id=new.id, discord_webhook_url=integration.discord_webhook_url,
-                    discord_include_warnings=integration.discord_include_warnings))
-            teams.append(new)
+            team.slug = await unique_team_slug(session, canonical.owner, canonical.name,
+                                               repo_id)
+        session.add(team)
         await session.flush()
-        if others:
-            await _rebuild_scores(session, team, teams)
-        logger.info("migration: team %s split into %s", team.slug, [t.slug for t in teams])
+        assert team.id is not None
+        assigned[team.id] = team
+        if team.id not in integrations:
+            old = next((integrations[r.team_id] for r in rows if r.team_id in integrations),
+                       None)
+            if old is not None:
+                integrations[team.id] = TeamIntegration(
+                    team_id=team.id, discord_webhook_url=old.discord_webhook_url,
+                    discord_include_warnings=old.discord_include_warnings)
+                session.add(integrations[team.id])
+        canonical.team_id = team.id
+        session.add(canonical)
+        await (await session.connection()).execute(update(PushEvent).where(
+            col(PushEvent.repository_id) == canonical.id).values(team_id=team.id))
+        logger.info("migration: %s -> team %s", canonical.full_name, team.slug)
+    await session.flush()
+
+    await _rebuild_scores(session, list(legacy), sorted(set(legacy) | set(assigned)))
+    for team_id, team in legacy.items():
+        if team_id in assigned:
+            continue
+        leftover = (await session.exec(select(PushEvent.id).where(
+            PushEvent.team_id == team_id))).first()
+        if leftover is None:  # every repository moved out: the old account-wide team goes
+            await (await session.connection()).execute(delete(TeamIntegration).where(
+                col(TeamIntegration.team_id) == team_id))
+            await (await session.connection()).execute(delete(Developer).where(
+                col(Developer.team_id) == team_id))
+            await session.delete(team)
+            logger.info("migration: removed emptied team %s", team.slug)
+    await session.flush()
 
 
-async def _rebuild_scores(session: AsyncSession, source: Team, teams: list[Team]) -> None:
+async def _merge_repository(session: AsyncSession, dup: Repository,
+                            canonical: Repository) -> None:
+    """Fold a duplicate row of the same GitHub repository (from an older install) into one."""
+    for model in (PushEvent, Finding):
+        await (await session.connection()).execute(update(model).where(
+            col(model.repository_id) == dup.id).values(repository_id=canonical.id))
+    for model in (RepoFile, CodeSymbol, CodeEdge):  # the stale graph of the old install
+        await (await session.connection()).execute(delete(model).where(
+            col(model.repository_id) == dup.id))
+    await session.delete(dup)
+    await session.flush()
+
+
+async def _rebuild_scores(session: AsyncSession, old_team_ids: list[int],
+                          team_ids: list[int]) -> None:
     """Replay every scored push, in order, onto per-team developer rows."""
     threshold = get_settings().readability_neutral_threshold
     originals = {d.id: d for d in (await session.exec(select(Developer).where(
-        Developer.team_id == source.id))).all()}
+        col(Developer.team_id).in_(old_team_ids)))).all()}
     fresh = Developer()
     for dev in originals.values():
         for field in _AGGREGATES:
             setattr(dev, field, getattr(fresh, field))
         session.add(dev)
     devs: dict[tuple[int, str], Developer] = {
-        (source.id, d.github_login): d for d in originals.values()}  # type: ignore[misc]
-    used: set[tuple[int, str]] = set()
+        (d.team_id, d.github_login): d for d in originals.values()}
+    used: set[int] = set()
 
-    team_ids = [t.id for t in teams]
-    rows = (await session.exec(
-        select(PushEvent, ScoreSnapshot)
-        .join(ScoreSnapshot, col(ScoreSnapshot.push_event_id) == col(PushEvent.id))
-        .where(col(PushEvent.team_id).in_(team_ids))
-        .order_by(col(PushEvent.completed_at), col(PushEvent.id)))).all()
-    for push, snap in rows:
+    async def developer_for(push: PushEvent) -> Developer:
         original = originals.get(push.developer_id)
         login = original.github_login if original else push.author_login
         key = (push.team_id, login)
@@ -144,7 +193,17 @@ async def _rebuild_scores(session: AsyncSession, source: Team, teams: list[Team]
             session.add(dev)
             await session.flush()
             devs[key] = dev
-        used.add(key)
+        assert dev.id is not None
+        used.add(dev.id)
+        return dev
+
+    rows = (await session.exec(
+        select(PushEvent, ScoreSnapshot)
+        .join(ScoreSnapshot, col(ScoreSnapshot.push_event_id) == col(PushEvent.id))
+        .where(col(PushEvent.team_id).in_(team_ids))
+        .order_by(col(PushEvent.completed_at), col(PushEvent.id)))).all()
+    for push, snap in rows:
+        dev = await developer_for(push)
         findings = [_scan_finding(f) for f in (await session.exec(select(Finding).where(
             Finding.push_event_id == push.id))).all()]
         craft = (CraftSubscores(push.docs_score, push.readability_score, push.type_hints_score)
@@ -165,27 +224,17 @@ async def _rebuild_scores(session: AsyncSession, source: Team, teams: list[Team]
         snap.faulty_pushes, snap.points_delta = dev.faulty_pushes, score.points_delta
         session.add_all([dev, push, snap])
 
-    # Unscored pushes (no Python changes) still need a developer on the right team.
+    # Unscored pushes (no Python changes, failed scans) still need a developer on their team.
+    scored = {push.id for push, _ in rows}
     for push in (await session.exec(select(PushEvent).where(
             col(PushEvent.team_id).in_(team_ids)))).all():
-        original = originals.get(push.developer_id)
-        if original is None or original.team_id == push.team_id:
-            continue
-        key = (push.team_id, original.github_login)
-        dev = devs.get(key)
-        if dev is None:
-            dev = Developer(team_id=push.team_id, github_login=original.github_login,
-                            **{f: getattr(original, f) for f in _PROFILE})
-            session.add(dev)
-            await session.flush()
-            devs[key] = dev
-        used.add(key)
-        push.developer_id = dev.id
-        session.add(push)
+        if push.id not in scored:
+            push.developer_id = (await developer_for(push)).id
+            session.add(push)
 
-    # Developers whose every push moved to another repository's team leave this one.
+    # Developers left without a push on their team (everything moved elsewhere) are dropped.
     for dev in originals.values():
-        if (source.id, dev.github_login) not in used:
+        if dev.id not in used:
             await session.delete(dev)
     await session.flush()
 
