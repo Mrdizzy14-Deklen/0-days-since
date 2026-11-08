@@ -1,0 +1,37 @@
+# How 0 Days Since works
+
+direction: right
+
+dev: Developer {shape: person}
+
+github: GitHub {
+  repo: Repository
+  checks: Checks API
+}
+
+backend: Backend (FastAPI) {
+  webhook: Webhook receiver
+  graph: Call-graph + static analysis
+  agent: Nemotron agent\n(investigate, skeptic, fix)
+  scoring: Scoring engine
+
+  webhook -> graph: push
+  graph -> agent: candidate findings
+  agent -> scoring: verified findings
+}
+
+nemotron: NVIDIA Nemotron {shape: cloud}
+db: Tiger Data\n(Postgres + TimescaleDB) {shape: cylinder}
+frontend: Dashboard (Next.js)
+discord: Discord {shape: cloud}
+
+dev -> github.repo: git push
+github.repo -> backend.webhook: webhook
+backend.agent <-> nemotron: LLM calls
+backend.agent -> github.repo: fix PR
+backend.scoring -> github.checks: pass / fail check
+backend.scoring -> db: scores, pushes, findings
+backend.scoring -> discord: faulty-push alert
+frontend -> backend: REST API
+db -> backend: leaderboard, trends
+dev -> frontend: views leaderboard
