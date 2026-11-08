@@ -17,24 +17,20 @@ export function PageSkeleton({ variant }: { variant: "team" | "list" | "push" | 
     <div aria-busy="true" aria-label="Loading">
       <HeaderBar />
       <div className="mx-auto max-w-[1400px] space-y-6 px-4 py-8 sm:px-6">
-        <Skeleton className="h-8 w-64" />
+        {variant !== "team" && <Skeleton className="h-12 w-64" />}
         {variant === "team" && (
           <>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              {Array.from({ length: 4 }, (_, i) => (
-                <Skeleton key={i} className="h-32 rounded-xl" />
-              ))}
+            <div className="grid grid-cols-1 items-center gap-6 lg:grid-cols-[minmax(0,1fr)_460px]">
+              <Skeleton className="h-16 w-80" />
+              <Skeleton className="h-44 rounded-md" />
             </div>
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  {Array.from({ length: 3 }, (_, i) => (
-                    <Skeleton key={i} className="h-64 rounded-xl" />
-                  ))}
-                </div>
-                <Skeleton className="h-56 rounded-xl" />
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                {Array.from({ length: 3 }, (_, i) => (
+                  <Skeleton key={i} className="h-72 rounded-md" />
+                ))}
               </div>
-              <Skeleton className="h-[480px] rounded-xl" />
+              <Skeleton className="h-[480px] rounded-md" />
             </div>
           </>
         )}

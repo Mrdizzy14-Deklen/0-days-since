@@ -46,7 +46,7 @@ export default async function Home() {
           <section className="mx-auto max-w-xl py-16 text-center">
             <h1 className="text-3xl font-semibold tracking-tight">No teams yet</h1>
             <p className="mt-3 text-muted-foreground">
-              Install the ZeroDay Score GitHub App on an organization. Every push to its Python
+              Install the 0 Days Since GitHub App on an organization. Every push to its Python
               repositories is scanned, scored and added to the team leaderboard.
             </p>
             <div className="mt-8 flex flex-col items-center gap-4">

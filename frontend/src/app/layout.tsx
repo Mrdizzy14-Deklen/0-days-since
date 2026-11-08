@@ -14,7 +14,7 @@ const body = Atkinson_Hyperlegible_Next({ variable: "--font-body", subsets: ["la
 const code = Martian_Mono({ variable: "--font-code", subsets: ["latin"], axes: ["wdth"] });
 
 export const metadata: Metadata = {
-  title: { default: "ZeroDay Score", template: "%s · ZeroDay Score" },
+  title: { default: "0 Days Since", template: "%s · 0 Days Since" },
   description:
     "Whole-project security and code-craft scoring for every push, with a team leaderboard.",
 };

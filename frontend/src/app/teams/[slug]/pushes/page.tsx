@@ -33,14 +33,7 @@ export default async function TeamPushesPage({ params }: Params) {
       <SiteHeader team={board.team} section="pushes" />
       <PageShell>
         <div className="mx-auto max-w-3xl">
-          <div className="mb-6">
-            <div className="eyebrow mb-2">Incident log</div>
-            <h1 className="font-display text-6xl font-black uppercase leading-none tracking-tight">Pushes</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Every scanned push, newest first. Filter by result or developer, or search, then open
-              one for the full review.
-            </p>
-          </div>
+          <h1 className="mb-6 font-display text-6xl font-black uppercase leading-none tracking-tight">Pushes</h1>
           <PushFeed slug={slug} initial={pushes} variant="full" developers={developers} viewerLogin={viewer.login} />
         </div>
       </PageShell>

@@ -16,11 +16,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { getJson } from "@/lib/backend";
-import type { TeamRef, TeamSummary } from "@/lib/types";
+import { incidentStats } from "@/lib/insights";
+import type { Push, TeamRef, TeamSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { getViewer } from "@/lib/viewer";
 
-export type Section = "overview" | "pushes" | null;
+export type Section = "overview" | "pushes" | "data" | null;
 
 function TeamSwitcher({ team, teams }: { team: TeamRef; teams: TeamSummary[] }) {
   if (teams.length <= 1) {
@@ -70,13 +71,24 @@ function NavLink({ href, active, children }: { href: string; active: boolean; ch
 
 export async function SiteHeader({ team, section = null }: { team?: TeamRef | null; section?: Section }) {
   const viewer = await getViewer();
-  const teams = team ? ((await getJson<TeamSummary[]>("teams").catch(() => null)) ?? []) : [];
+  const [teams, recent] = team
+    ? await Promise.all([
+        getJson<TeamSummary[]>("teams").catch(() => null),
+        getJson<Push[]>(`teams/${encodeURIComponent(team.slug)}/pushes?limit=50`).catch(() => null),
+      ])
+    : [null, null];
+  const days = recent ? (incidentStats(recent, Date.now())?.days ?? null) : null;
 
   return (
     <header className="sticky top-[env(safe-area-inset-top,0px)] z-40 border-b-2 border-foreground bg-background/90 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-2 px-4 sm:px-6">
-        <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="ZeroDay Score home">
-          <LogoMark />
+        <Link
+          href={team ? `/teams/${team.slug}` : "/"}
+          className="group/logo flex shrink-0 items-center gap-2.5 rounded-[5px] outline-none"
+          aria-label={days !== null ? `0 Days Since home: ${days} days since last incident` : "0 Days Since home"}
+          title={days !== null ? `${days} ${days === 1 ? "day" : "days"} since last incident` : undefined}
+        >
+          <LogoMark days={days} />
           <Wordmark className="hidden sm:inline" />
         </Link>
         {team && (
@@ -84,13 +96,16 @@ export async function SiteHeader({ team, section = null }: { team?: TeamRef | nu
             <span className="text-muted-foreground/50" aria-hidden>
               /
             </span>
-            <TeamSwitcher team={team} teams={teams} />
+            <TeamSwitcher team={team} teams={teams ?? []} />
             <nav className="ml-2 hidden h-full items-center gap-5 sm:flex" aria-label="Team">
               <NavLink href={`/teams/${team.slug}`} active={section === "overview"}>
                 Overview
               </NavLink>
               <NavLink href={`/teams/${team.slug}/pushes`} active={section === "pushes"}>
                 Pushes
+              </NavLink>
+              <NavLink href={`/teams/${team.slug}/data`} active={section === "data"}>
+                Data
               </NavLink>
             </nav>
           </>
@@ -140,6 +155,9 @@ export async function SiteHeader({ team, section = null }: { team?: TeamRef | nu
           </NavLink>
           <NavLink href={`/teams/${team.slug}/pushes`} active={section === "pushes"}>
             Pushes
+          </NavLink>
+          <NavLink href={`/teams/${team.slug}/data`} active={section === "data"}>
+            Data
           </NavLink>
         </nav>
       )}

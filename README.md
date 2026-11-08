@@ -1,4 +1,4 @@
-# ZeroDay Score
+# 0 Days Since
 
 A GitHub App + dashboard that scans every push of a Python repository for whole-project,
 cross-file vulnerabilities and code craft, then ranks developers on a 1,000-point leaderboard

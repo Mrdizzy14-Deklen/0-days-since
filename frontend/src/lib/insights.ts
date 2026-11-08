@@ -1,7 +1,7 @@
 /** Plain-language helpers: tips, verdicts, rank movement and achievements. */
 
 import { CRAFT_WARN_THRESHOLD, cweName, pushCheckState, type CheckState } from "@/lib/format";
-import type { Developer, Finding, Push, ScorePoint } from "@/lib/types";
+import type { Developer, Finding, Push, ScorePoint, TeamStats } from "@/lib/types";
 
 export const CWE_TIPS: Record<string, string> = {
   "CWE-22": "Resolve file paths and check they stay inside the allowed folder before opening them.",
@@ -188,4 +188,34 @@ export function focusArea(d: Developer): FocusArea {
     };
   }
   return { kind: "none", title: "Nothing to fix right now", tip: "Keep pushing clean, documented code to hold your rank." };
+}
+
+export interface IncidentStats {
+  /** Whole days since the most recent push with a confirmed vulnerability. */
+  days: number;
+  last: Push | null;
+  /** Longest stretch without an incident within the loaded history, in days. */
+  record: number;
+}
+
+const DAY_MS = 86_400_000;
+const pushTime = (p: Push) => new Date(p.completed_at ?? p.created_at ?? 0).getTime();
+
+/** "Days since last incident" for a team, from its recent pushes. null when nothing is scored. */
+export function incidentStats(pushes: Push[], now: number): IncidentStats | null {
+  const scored = pushes.filter((p) => p.status === "completed").sort((a, b) => pushTime(b) - pushTime(a));
+  if (scored.length === 0) return null;
+  const incidents = scored.filter((p) => p.is_faulty);
+  const last = incidents[0] ?? null;
+  const since = last ? pushTime(last) : pushTime(scored.at(-1)!);
+  const edges = [pushTime(scored.at(-1)!), ...incidents.map(pushTime).sort((a, b) => a - b), now];
+  let record = 0;
+  for (let i = 1; i < edges.length; i++) record = Math.max(record, Math.floor((edges[i] - edges[i - 1]) / DAY_MS));
+  return { days: Math.floor((now - since) / DAY_MS), last, record };
+}
+
+/** Team page title: the repository's name; teams with several repos fall back to the team name. */
+export function pageTitle(stats: TeamStats | null, teamName: string): string {
+  const repos = stats?.repositories ?? [];
+  return repos.length === 1 ? (repos[0].full_name.split("/").pop() ?? teamName) : teamName;
 }

@@ -1,4 +1,4 @@
-# ZeroDay Score — Dashboard
+# 0 Days Since — Dashboard
 
 Next.js 15 (App Router) · TypeScript · Tailwind v4 · shadcn/ui · Recharts · Lucide · Auth.js
 (GitHub OAuth).
@@ -20,12 +20,14 @@ With the backend running and the demo team seeded (`backend/seed_demo.py`), open
 
 | Route | What it shows |
 |---|---|
-| `/teams/[slug]` | Overview: first-visit explainer, team stats, top-3 podium and ranked list (composite 0–1000, Security /700 and Craft /300 bars, pushes vs. faulty, clean streak, rank change over 7 days, most frequent CWE / code smell with fix tips), score-over-time chart with table view, live feed, team's top weaknesses |
-| `/teams/[slug]/pushes` | Every push with result filters, developer filter and search, grouped by day |
-| `/pushes/[id]` | The Check Run's *Details* link. A verdict banner that says what happened in one sentence, then tabs: **Review** (what to fix, where, why and how; dismissed false alarms), **Impact map** (cross-file blast radius: entry point → changed function → dangerous call, selectable attack paths, affected files / incident scope), **Code craft** (sub-scores and quick wins). Auto-refreshes while a scan is running. |
-| `/developers/[id]` | Rank, achievements, a focus-area tip, score breakdown and stacked history, confirmed vulnerabilities, code smells, recent pushes |
+| `/teams/[slug]` | **Overview**: the repo name, the "days since last incident" board, the leaderboard (podium + ranked rows: composite, Security /700 and Craft /300 bars, pushes vs. faulty, streak, 7-day rank change, most frequent CWE / code smell) and the live feed of latest pushes |
+| `/teams/[slug]/pushes` | **Pushes**: every push with result and developer filters, search, grouped by day |
+| `/teams/[slug]/data` | **Data**: team averages, score over time (chart + table view), top weaknesses with fix tips, connected repositories |
+| `/pushes/[id]` | The Check Run's *Details* link: one-sentence verdict, then **Review** (what to fix), **Impact map** (cross-file attack paths, affected files) and **Code craft** tabs |
+| `/developers/[id]` | Player card: rank, achievements, focus-area tip, score breakdown and history, recent pushes |
 
-"How scoring works" in the header opens a plain-language guide on every page.
+The **?** button in the header opens the scoring guide. Hovering the **0** logo flips it to the
+team's current days-since count.
 
 ## How it talks to the backend
 

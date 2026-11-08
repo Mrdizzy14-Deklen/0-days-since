@@ -1,8 +1,7 @@
 "use client";
 
-import { BookOpen, Bot, CircleCheck, OctagonX, ShieldHalf, Sparkles, TriangleAlert } from "lucide-react";
+import { Bot, CircleCheck, GitCommitHorizontal, MousePointerClick, OctagonX, ShieldCheck, ShieldHalf, Sparkles, TriangleAlert } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -24,25 +23,45 @@ function Section({ title, icon: Icon, children }: { title: string; icon: React.C
   );
 }
 
-/** Plain-language explanation of the score, opened from the header on every page. */
-export function ScoringGuide({ compact = false }: { compact?: boolean }) {
+const STEPS = [
+  { icon: GitCommitHorizontal, title: "Push code as usual", text: "Every push to a connected Python repo is reviewed in about 30 seconds." },
+  { icon: ShieldCheck, title: "Get a pass, warn or fail", text: "It shows up as a GitHub check. Confirmed critical or high issues block the merge." },
+  { icon: MousePointerClick, title: "Open a push to fix it", text: "See where the problem is, how attacker input reaches it, and how to fix it." },
+];
+
+/** Plain-language explanation of the score behind a small "?" button in the header. */
+export function ScoringGuide() {
   return (
     <Sheet>
-      <SheetTrigger asChild>
-        <Button variant="ghost" size={compact ? "icon" : "sm"} aria-label="How scoring works">
-          <BookOpen className="size-4" />
-          {!compact && <span className="hidden md:inline">How scoring works</span>}
-        </Button>
+      <SheetTrigger
+        aria-label="How scoring works"
+        title="How scoring works"
+        className="grid size-8 place-items-center rounded-full border-2 border-foreground font-display text-lg font-black leading-none transition-colors hover:bg-brand hover:text-brand-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        ?
       </SheetTrigger>
       <SheetContent className="w-full overflow-y-auto sm:max-w-md">
         <SheetHeader>
           <SheetTitle>How scoring works</SheetTitle>
-          <SheetDescription>
-            Every push to a connected Python repository is reviewed in about 30 seconds and adds
-            to your score.
-          </SheetDescription>
+          <SheetDescription>What goes into your score, and what the GitHub check means.</SheetDescription>
         </SheetHeader>
         <div className="space-y-7 px-4 pb-8">
+          <ol className="space-y-3">
+            {STEPS.map((step, i) => (
+              <li key={step.title} className="flex gap-3">
+                <span className="grid size-8 shrink-0 place-items-center rounded-[4px] border-2 border-foreground bg-brand text-brand-foreground">
+                  <step.icon className="size-4" aria-hidden />
+                </span>
+                <div className="text-sm">
+                  <div className="font-medium">
+                    <span className="mr-1.5 font-display text-base font-black">{i + 1}</span>
+                    {step.title}
+                  </div>
+                  <p className="text-muted-foreground">{step.text}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
           <div className="rounded-xl border p-4">
             <div className="text-xs text-muted-foreground">Your score, out of 1,000</div>
             <div className="mt-2 flex h-3 overflow-hidden rounded-full">
