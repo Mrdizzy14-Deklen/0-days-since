@@ -1,0 +1,6 @@
+# Only install package versions that have been public for at least 14 days.
+minimumReleaseAge: 20160
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+  "@tailwindcss/oxide": true

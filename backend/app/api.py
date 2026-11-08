@@ -134,6 +134,10 @@ def push_json(p: PushEvent, dev: Developer | None, repo: Repository | None) -> d
     }
 
 
+def team_ref(t: Team | None) -> dict[str, Any] | None:
+    return {"id": t.id, "slug": t.slug, "name": t.name} if t else None
+
+
 def finding_json(f: Finding) -> dict[str, Any]:
     return {
         "id": f.id, "category": f.category.value, "source": f.source.value,
@@ -187,7 +191,7 @@ async def leaderboard(slug: str, session: SessionDep, principal: PrincipalDep
     devs = (await session.exec(select(Developer).where(Developer.team_id == team.id).order_by(
         col(Developer.composite_score).desc(), col(Developer.clean_streak).desc(),
         Developer.github_login))).all()
-    return {"team": {"id": team.id, "slug": team.slug, "name": team.name},
+    return {"team": team_ref(team),
             "developers": [developer_json(d, i) for i, d in enumerate(devs, start=1)]}
 
 
@@ -267,6 +271,7 @@ async def developer_detail(developer_id: int, session: SessionDep, principal: Pr
     pushes = (await session.exec(select(PushEvent.id).where(
         PushEvent.developer_id == dev.id).order_by(col(PushEvent.id).desc()).limit(20))).all()
     return {
+        "team": team_ref(await session.get(Team, dev.team_id)),
         "developer": developer_json(dev),
         "history": [{"t": _iso(s.recorded_at), "composite": s.composite_score,
                      "security": s.security_score, "craft": s.craft_score,
@@ -311,6 +316,7 @@ async def push_detail(push_id: int, session: SessionDep, principal: PrincipalDep
           "compromised": m["file_path"] in flagged_files} for m in modules.values()),
         key=lambda m: (not m["compromised"], m["file_path"]))
     return {
+        "team": team_ref(await session.get(Team, push.team_id)),
         "push": push_json(push, dev, repo),
         "vulnerabilities": [finding_json(f) for f in vulns],
         "quality_findings": [finding_json(f) for f in quality],

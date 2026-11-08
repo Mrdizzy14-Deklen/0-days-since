@@ -139,6 +139,7 @@ async def test_end_to_end(db: None, gh: FakeGitHub) -> None:
 
         detail = (await client.get(f"/api/pushes/{push_id}")).json()
         assert detail["vulnerabilities"][0]["cwe"] == "CWE-89"
+        assert detail["team"]["slug"] == "acme"
         scope = {m["file_path"]: m for m in detail["incident_scope"]}
         assert scope["app/db.py"]["compromised"] and "sql" in scope["app/db.py"]["sinks"]
         assert "app/routes/users.py" in scope
@@ -153,6 +154,7 @@ async def test_end_to_end(db: None, gh: FakeGitHub) -> None:
         assert [p["security"] for p in trends["series"]["alice"]] == [210, 455]
 
         dev_detail = (await client.get(f"/api/developers/{alice['id']}")).json()
+        assert dev_detail["team"]["slug"] == "acme"
         assert len(dev_detail["history"]) == 2 and len(dev_detail["recent_pushes"]) == 2
 
         assert (await client.get("/api/teams/nope/leaderboard")).status_code == 404

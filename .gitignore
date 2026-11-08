@@ -21,3 +21,8 @@ out/
 .DS_Store
 .idea/
 .vscode/
+
+# Local databases (demo seed on SQLite)
+*.db
+*.db-journal
+*.tsbuildinfo
