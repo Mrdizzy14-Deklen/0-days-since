@@ -89,6 +89,24 @@ class _GraphCache:
 graph_cache = _GraphCache()
 
 
+class _KeyedLocks:
+    """One asyncio.Lock per key (the backend runs a single worker process)."""
+
+    def __init__(self) -> None:
+        self._locks: dict[object, asyncio.Lock] = {}
+
+    def __call__(self, key: object) -> asyncio.Lock:
+        return self._locks.setdefault(key, asyncio.Lock())
+
+
+# Scans and installation events for one installation run concurrently (one per repository),
+# but share the team, repository and developer rows: "select, insert if missing" on those must
+# not interleave, or every job after the first dies on a unique-constraint violation.
+installation_lock = _KeyedLocks()
+# A developer's running scores are read-modify-written once per push, from any repository.
+developer_lock = _KeyedLocks()
+
+
 # --------------------------------------------------------------------------------------
 # Job description
 # --------------------------------------------------------------------------------------
@@ -354,7 +372,7 @@ async def handle_installation_event(event: str, payload: dict[str, Any], *,
     installation = payload["installation"]
     installation_id = int(installation["id"])
     repo_ids: list[int] = []
-    async with session_scope() as session:
+    async with installation_lock(installation_id), session_scope() as session:
         if event == "installation" and action in {"deleted", "suspend"}:
             team = (await session.exec(select(Team).where(
                 Team.github_installation_id == installation_id))).first()
@@ -396,7 +414,7 @@ async def run_scan(job: ScanJob, *, gh_transport: Any = None,
                    scanner: AIScanner | None = None) -> int | None:
     """Full scan of one push. Returns the PushEvent id (None if skipped)."""
     settings = get_settings()
-    async with session_scope() as session:
+    async with installation_lock(job.installation_id), session_scope() as session:
         if job.delivery_id and (await session.exec(select(PushEvent.id).where(
                 PushEvent.delivery_id == job.delivery_id))).first():
             return None  # webhook redelivery
@@ -567,8 +585,8 @@ async def _scan_locked(gh: GitHubApp, token: str, job: ScanJob, push_id: int, re
                 " ".join(f"{k}={v}" for k, v in timings.items()))
 
     # ---- 4. scoring + persistence -------------------------------------------------------
-    async with session_scope() as session:
-        dev = await session.get(Developer, dev_id)
+    async with developer_lock(dev_id), session_scope() as session:
+        dev = await session.get(Developer, dev_id, with_for_update=True)
         push = await session.get(PushEvent, push_id)
         assert dev is not None and push is not None
         score = apply_push(dev, result.findings, craft,
