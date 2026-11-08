@@ -39,10 +39,10 @@ export function ScoreBar({
         aria-valuemin={0}
         aria-valuemax={max}
         aria-valuenow={Math.round(v)}
-        className={cn("relative mt-1 overflow-hidden rounded-full bg-muted", compact ? "h-1.5" : "h-2")}
+        className={cn("relative mt-1 overflow-hidden rounded-[2px] bg-muted", compact ? "h-1.5" : "h-2.5")}
       >
         <div
-          className="h-full rounded-full transition-[width] duration-500"
+          className="bar-fill h-full rounded-[2px]"
           style={{ width: `${ratio * 100}%`, background: color }}
         />
         {threshold !== undefined && (

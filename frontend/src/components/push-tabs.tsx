@@ -65,7 +65,7 @@ export function PushTabs({
                   {badge}
                 </span>
               )}
-              {tab === id && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand" aria-hidden />}
+              {tab === id && <span className="absolute inset-x-2 -bottom-px h-[3px] bg-foreground" aria-hidden />}
             </button>
           ))}
         </div>
@@ -92,7 +92,7 @@ export function ShowAttackPath() {
 export function GoToCraft({ children }: { children: React.ReactNode }) {
   const setTab = useContext(TabContext);
   return (
-    <button type="button" className="font-medium text-brand underline-offset-2 hover:underline" onClick={() => setTab("craft")}>
+    <button type="button" className="font-medium text-brand-text underline-offset-2 hover:underline" onClick={() => setTab("craft")}>
       {children}
     </button>
   );

@@ -239,7 +239,7 @@ export function TrendChart({
             </p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+              <LineChart data={rows} margin={{ top: 8, right: 24, bottom: 0, left: -4 }}>
                 <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeWidth={1} />
                 <XAxis
                   dataKey="t"
@@ -247,7 +247,7 @@ export function TrendChart({
                   scale="time"
                   domain={[since, now]}
                   tickFormatter={(t: number) => dateFmt.format(new Date(t))}
-                  tick={{ fill: "var(--chart-muted)", fontSize: 11 }}
+                  tick={{ fill: "var(--chart-muted)", fontSize: 10, fontFamily: "var(--font-code)" }}
                   axisLine={{ stroke: "var(--chart-axis)" }}
                   tickLine={false}
                   minTickGap={32}
@@ -255,7 +255,7 @@ export function TrendChart({
                 <YAxis
                   domain={[0, max]}
                   tickCount={6}
-                  tick={{ fill: "var(--chart-muted)", fontSize: 11 }}
+                  tick={{ fill: "var(--chart-muted)", fontSize: 10, fontFamily: "var(--font-code)" }}
                   axisLine={false}
                   tickLine={false}
                   width={44}

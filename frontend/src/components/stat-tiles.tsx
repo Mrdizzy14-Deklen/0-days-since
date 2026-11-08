@@ -27,14 +27,14 @@ function Tile({
       <TooltipTrigger asChild>
         <div className="card-surface flex cursor-default flex-col gap-3 p-4" tabIndex={0}>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className={cn("grid size-7 place-items-center rounded-lg", tone)}>
+            <span className={cn("grid size-7 place-items-center rounded-[4px]", tone)}>
               <Icon className="size-4" aria-hidden />
             </span>
             {label}
           </div>
           <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-semibold tracking-tight tabular-nums">{value}</span>
-            {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
+            <span className="font-display text-5xl font-black leading-none tracking-tight tabular-nums">{value}</span>
+            {unit && <span className="font-mono text-xs text-muted-foreground">{unit}</span>}
           </div>
           <div className="text-xs text-muted-foreground">{detail}</div>
         </div>
@@ -59,7 +59,7 @@ export function StatTiles({ stats, developers }: { stats: TeamStats; developers:
         unit="/1000"
         detail={`${developers.length} ${developers.length === 1 ? "developer" : "developers"} ranked`}
         help="The average composite score (security + craft) across everyone on the team."
-        tone="bg-brand-soft text-brand"
+        tone="bg-brand-soft text-brand-text"
       />
       <Tile
         icon={ShieldCheck}

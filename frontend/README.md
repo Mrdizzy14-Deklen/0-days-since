@@ -39,6 +39,19 @@ The live feed subscribes to `/api/teams/{slug}/stream`. New pushes and status ch
 the feed in place, raise an in-dashboard toast, and refresh the server-rendered leaderboard,
 stats and trend chart. All notifications stay inside the dashboard.
 
+## Design
+
+"Zero days since": workplace-safety signage meets a stadium scoreboard.
+
+- **Paper** (light, default) and **Night shift** (dark) themes: warm enamel paper or graphite,
+  ink-black type, one hi-vis lime accent that is never used for status or chart series.
+- Type: Big Shoulders (signage condensed) for headings and scoreboard numerals, Big Shoulders
+  Stencil for the incident sign, Atkinson Hyperlegible Next for body text, Martian Mono for code.
+- Signature pieces: the "days since last incident" board, split-flap score tiles, enamel
+  "plates" for the elements that matter most, hazard tape only on blocked merges.
+- One staggered reveal on page load, bars that fill in, flipping digits. All motion is
+  disabled under `prefers-reduced-motion`.
+
 ## Notes
 
 - `pnpm-workspace.yaml` sets `minimumReleaseAge` so only package versions public for 14+ days

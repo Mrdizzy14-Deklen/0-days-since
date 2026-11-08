@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Check, ChevronsUpDown, LogOut, ShieldHalf } from "lucide-react";
+import { Check, ChevronsUpDown, LogOut } from "lucide-react";
 
 import { signOut } from "@/auth";
 import { DevAvatar } from "@/components/dev-avatar";
+import { LogoMark, Wordmark } from "@/components/logo";
 import { ScoringGuide } from "@/components/scoring-guide";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -58,12 +59,11 @@ function NavLink({ href, active, children }: { href: string; active: boolean; ch
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "relative flex h-full items-center px-1 text-sm transition-colors",
-        active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+        "relative flex h-full items-center px-1 font-display text-lg font-bold uppercase tracking-wide transition-colors",
+        active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
     >
-      {children}
-      {active && <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-brand" aria-hidden />}
+      <span className={cn("px-0.5", active && "marker")}>{children}</span>
     </Link>
   );
 }
@@ -73,13 +73,11 @@ export async function SiteHeader({ team, section = null }: { team?: TeamRef | nu
   const teams = team ? ((await getJson<TeamSummary[]>("teams").catch(() => null)) ?? []) : [];
 
   return (
-    <header className="sticky top-[env(safe-area-inset-top,0px)] z-40 border-b bg-background/80 backdrop-blur-md">
+    <header className="sticky top-[env(safe-area-inset-top,0px)] z-40 border-b-2 border-foreground bg-background/90 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-2 px-4 sm:px-6">
-        <Link href="/" className="flex shrink-0 items-center gap-2 font-semibold tracking-tight">
-          <span className="grid size-8 place-items-center rounded-lg bg-brand text-brand-foreground shadow-sm">
-            <ShieldHalf className="size-4" aria-hidden />
-          </span>
-          <span className="hidden sm:inline">ZeroDay Score</span>
+        <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="ZeroDay Score home">
+          <LogoMark />
+          <Wordmark className="hidden sm:inline" />
         </Link>
         {team && (
           <>
@@ -99,7 +97,7 @@ export async function SiteHeader({ team, section = null }: { team?: TeamRef | nu
         )}
         <div className="ml-auto flex items-center gap-1">
           {viewer.demoMode && (
-            <span className="mr-1 hidden rounded-full border border-dashed px-2.5 py-0.5 text-xs text-muted-foreground lg:inline">
+            <span className="eyebrow mr-1 hidden rounded-[3px] border border-dashed border-foreground/40 px-2 py-1 lg:inline">
               Demo mode · no sign-in
             </span>
           )}
@@ -159,19 +157,23 @@ export function SectionHeader({
   description,
   action,
   id,
+  index,
 }: {
   title: string;
   description?: React.ReactNode;
   action?: React.ReactNode;
   id?: string;
+  /** Signage-style section number, e.g. "01". */
+  index?: string;
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
       <div className="min-w-0">
-        <h2 id={id} className="text-base font-semibold tracking-tight">
+        {index && <div className="eyebrow mb-1">§ {index}</div>}
+        <h2 id={id} className="font-display text-3xl font-extrabold uppercase leading-none tracking-wide">
           {title}
         </h2>
-        {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
+        {description && <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>}
       </div>
       {action}
     </div>

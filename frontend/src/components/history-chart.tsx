@@ -69,7 +69,7 @@ export function HistoryChart({ history, now }: { history: ScorePoint[]; now: num
       </ul>
       <div className="h-56" role="img" aria-label="Score history: security and craft stacked to the composite score">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+          <AreaChart data={rows} margin={{ top: 8, right: 24, bottom: 0, left: -4 }}>
             <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
             <XAxis
               dataKey="t"
@@ -77,7 +77,7 @@ export function HistoryChart({ history, now }: { history: ScorePoint[]; now: num
               scale="time"
               domain={["dataMin", "dataMax"]}
               tickFormatter={(t: number) => dateFmt.format(new Date(t))}
-              tick={{ fill: "var(--chart-muted)", fontSize: 11 }}
+              tick={{ fill: "var(--chart-muted)", fontSize: 10, fontFamily: "var(--font-code)" }}
               axisLine={{ stroke: "var(--chart-axis)" }}
               tickLine={false}
               minTickGap={32}
@@ -85,7 +85,7 @@ export function HistoryChart({ history, now }: { history: ScorePoint[]; now: num
             <YAxis
               domain={[0, MAX_COMPOSITE]}
               tickCount={6}
-              tick={{ fill: "var(--chart-muted)", fontSize: 11 }}
+              tick={{ fill: "var(--chart-muted)", fontSize: 10, fontFamily: "var(--font-code)" }}
               axisLine={false}
               tickLine={false}
               width={44}

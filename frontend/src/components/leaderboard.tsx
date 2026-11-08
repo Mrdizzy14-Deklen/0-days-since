@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Bug, Flame, ShieldCheck, Sparkles } from "lucide-react";
 
 import { DevAvatar } from "@/components/dev-avatar";
+import { FlipNumber } from "@/components/flip-number";
 import { ScoreBar } from "@/components/score-bar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -17,9 +18,9 @@ import type { Developer } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const MEDAL = [
-  { label: "1st", ring: "ring-[#d4a72c]/60", chip: "bg-[#d4a72c]/15 text-[#a07a12] dark:text-[#e8c25a]" },
-  { label: "2nd", ring: "ring-[#9ca3af]/60", chip: "bg-[#9ca3af]/15 text-[#6b7280] dark:text-[#d1d5db]" },
-  { label: "3rd", ring: "ring-[#b0703c]/60", chip: "bg-[#b0703c]/15 text-[#8a5226] dark:text-[#e0a272]" },
+  { label: "1st", ring: "ring-[#c99a1c]", chip: "bg-[#e9b923] text-[#12120f]" },
+  { label: "2nd", ring: "ring-[#9a9a92]", chip: "bg-[#c4c3bb] text-[#12120f]" },
+  { label: "3rd", ring: "ring-[#a8673a]", chip: "bg-[#c98a5c] text-[#12120f]" },
 ];
 
 export function Movement({ value }: { value: number | null | undefined }) {
@@ -134,7 +135,7 @@ function Bars({ d }: { d: Developer }) {
 
 function YouTag() {
   return (
-    <span className="rounded-full bg-brand px-1.5 py-px text-[10px] font-semibold text-brand-foreground">You</span>
+    <span className="rounded-[3px] border border-foreground bg-brand px-1.5 py-px font-display text-xs font-black uppercase text-brand-foreground">You</span>
   );
 }
 
@@ -144,12 +145,14 @@ function PodiumCard({ d, place, movement, isYou }: { d: Developer; place: number
     <Link
       href={`/developers/${d.id}`}
       className={cn(
-        "card-surface group flex flex-col gap-4 p-4 transition-shadow hover:shadow-md",
-        isYou && "ring-2 ring-brand/60",
+        "plate group flex flex-col gap-4 p-4 transition-transform duration-200 hover:-translate-x-0.5 hover:-translate-y-0.5",
+        isYou && "outline-4 outline-offset-2 outline-[var(--brand)]",
       )}
     >
       <div className="flex items-center justify-between">
-        <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", medal.chip)}>{medal.label}</span>
+        <span className={cn("rounded-[3px] border-2 border-foreground px-2 py-0.5 font-display text-base font-black uppercase leading-none", medal.chip)}>
+          {medal.label}
+        </span>
         <Movement value={movement} />
       </div>
       <div className="flex items-center gap-3">
@@ -162,9 +165,9 @@ function PodiumCard({ d, place, movement, isYou }: { d: Developer; place: number
           <div className="truncate text-xs text-muted-foreground">@{d.github_login}</div>
         </div>
       </div>
-      <div className="flex items-baseline gap-1">
-        <span className="font-mono text-4xl font-semibold tracking-tight tabular-nums">{d.composite_score}</span>
-        <span className="font-mono text-sm text-muted-foreground">/1000</span>
+      <div className="flex items-end gap-2">
+        <FlipNumber value={d.composite_score} />
+        <span className="pb-1 font-mono text-xs text-muted-foreground">/1000</span>
       </div>
       <Bars d={d} />
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
@@ -190,7 +193,7 @@ function Row({ d, movement, isYou }: { d: Developer; movement: number | null | u
         className={cn(ROW_GRID, "group rounded-lg px-3 py-3 transition-colors hover:bg-muted/60", isYou && "bg-brand-soft")}
       >
         <div className="flex flex-col items-center leading-none">
-          <span className="font-mono text-sm font-semibold text-muted-foreground">{d.rank}</span>
+          <span className="font-display text-3xl font-black text-muted-foreground">{d.rank}</span>
           <Movement value={movement} />
         </div>
         <div className="flex min-w-0 items-center gap-2.5">
@@ -204,8 +207,8 @@ function Row({ d, movement, isYou }: { d: Developer; movement: number | null | u
           </div>
         </div>
         <div className="text-right">
-          <span className="font-mono text-xl font-semibold tabular-nums">{d.composite_score}</span>
-          <span className="font-mono text-xs text-muted-foreground">/1000</span>
+          <span className="font-display text-4xl font-black leading-none tabular-nums">{d.composite_score}</span>
+          <span className="font-mono text-[10px] text-muted-foreground">/1000</span>
         </div>
         {/* On small screens these wrap under the name; on desktop they become columns. */}
         <div className="col-span-3 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:contents">

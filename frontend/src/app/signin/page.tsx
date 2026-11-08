@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { ShieldHalf } from "lucide-react";
 
 import { GithubMark } from "@/components/icons";
+import { LogoMark, Wordmark } from "@/components/logo";
 import { authEnabled, signIn } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { getViewer } from "@/lib/viewer";
@@ -24,14 +24,12 @@ export default async function SignInPage({
 
   return (
     <main className="grid min-h-dvh place-items-center px-4">
-      <div className="w-full max-w-sm rounded-xl border bg-card p-8 shadow-sm">
-        <div className="mb-6 flex items-center gap-2 font-semibold">
-          <span className="grid size-8 place-items-center rounded-md bg-foreground text-background">
-            <ShieldHalf className="size-4" aria-hidden />
-          </span>
-          ZeroDay Score
+      <div className="plate w-full max-w-sm p-8">
+        <div className="mb-8 flex items-center gap-2.5">
+          <LogoMark />
+          <Wordmark />
         </div>
-        <h1 className="text-xl font-semibold tracking-tight">Sign in to your team</h1>
+        <h1 className="font-display text-4xl font-black uppercase leading-none">Clock in</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Your GitHub login decides which teams you can see. Only installations you belong to are
           shown.

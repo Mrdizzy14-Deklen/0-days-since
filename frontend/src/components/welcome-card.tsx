@@ -45,24 +45,21 @@ export function WelcomeCard() {
     }
   };
   return (
-    <section className="card-surface relative overflow-hidden p-5" aria-label="How it works">
-      <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(600px_200px_at_0%_0%,var(--brand-soft),transparent)]"
-        aria-hidden
-      />
+    <section className="card-surface relative overflow-hidden border-2 border-dashed border-foreground/40 p-5" aria-label="How it works">
       <Button variant="ghost" size="icon" className="absolute right-2 top-2" onClick={dismiss} aria-label="Dismiss">
         <X className="size-4" />
       </Button>
-      <h2 className="relative font-semibold">How ZeroDay Score works</h2>
+      <div className="eyebrow relative">Safety briefing</div>
+      <h2 className="relative font-display text-3xl font-extrabold uppercase leading-none">How scoring works</h2>
       <ol className="relative mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
         {STEPS.map((s, i) => (
           <li key={s.title} className="flex gap-3">
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
+            <span className="grid size-9 shrink-0 place-items-center rounded-[4px] border-2 border-foreground bg-brand text-brand-foreground">
               <s.icon className="size-4" aria-hidden />
             </span>
             <div>
               <div className="text-sm font-medium">
-                <span className="mr-1 font-mono text-muted-foreground">{i + 1}.</span>
+                <span className="mr-1.5 font-display text-lg font-black">{i + 1}</span>
                 {s.title}
               </div>
               <p className="mt-0.5 text-sm text-muted-foreground">{s.text}</p>

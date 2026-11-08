@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Award, Bug, Flame, Lightbulb, ShieldCheck, Sparkles, Target } from "lucide-react";
 
 import { DevAvatar } from "@/components/dev-avatar";
+import { FlipNumber } from "@/components/flip-number";
 import { HistoryChart } from "@/components/history-chart";
 import { PushRow } from "@/components/push-row";
 import { RelativeTime } from "@/components/relative-time";
@@ -95,11 +96,12 @@ export default async function DeveloperPage({ params }: Params) {
           </Link>
         )}
 
-        <header className="card-surface flex flex-col gap-6 p-5 sm:p-6 md:flex-row md:items-center">
+        <header className="plate flex flex-col gap-6 p-5 sm:p-6 md:flex-row md:items-center">
           <div className="flex min-w-0 flex-1 items-center gap-4">
-            <DevAvatar login={d.github_login} src={d.avatar_url} className="size-16 ring-2 ring-brand/40" />
+            <DevAvatar login={d.github_login} src={d.avatar_url} className="size-16 ring-2 ring-foreground" />
             <div className="min-w-0">
-              <h1 className="truncate text-2xl font-semibold tracking-tight">{d.display_name}</h1>
+              <div className="eyebrow">Player card</div>
+              <h1 className="truncate font-display text-5xl font-black uppercase leading-none tracking-tight">{d.display_name}</h1>
               <p className="text-sm text-muted-foreground">
                 @{d.github_login}
                 {d.last_push_at && (
@@ -116,7 +118,7 @@ export default async function DeveloperPage({ params }: Params) {
                       title={b.detail}
                       className="inline-flex items-center gap-1 rounded-full border bg-brand-soft px-2 py-0.5 text-xs"
                     >
-                      <Award className="size-3 text-brand" aria-hidden /> {b.label}
+                      <Award className="size-3 text-brand-text" aria-hidden /> {b.label}
                     </li>
                   ))}
                 </ul>
@@ -127,7 +129,7 @@ export default async function DeveloperPage({ params }: Params) {
             {ranked?.rank && (
               <div>
                 <div className="text-xs text-muted-foreground">Rank</div>
-                <div className="font-mono text-3xl font-semibold">
+                <div className="font-display text-6xl font-black leading-none">
                   #{ranked.rank}
                   {teamSize && <span className="text-base text-muted-foreground"> of {teamSize}</span>}
                 </div>
@@ -135,9 +137,9 @@ export default async function DeveloperPage({ params }: Params) {
             )}
             <div>
               <div className="text-xs text-muted-foreground">Score</div>
-              <div className="font-mono text-3xl font-semibold tabular-nums">
-                {d.composite_score}
-                <span className="text-base text-muted-foreground">/1000</span>
+              <div className="flex items-end gap-1.5">
+                <FlipNumber value={d.composite_score} />
+                <span className="pb-1 font-mono text-xs text-muted-foreground">/1000</span>
               </div>
             </div>
           </div>
@@ -154,14 +156,14 @@ export default async function DeveloperPage({ params }: Params) {
           <span
             className={cn(
               "grid size-10 shrink-0 place-items-center rounded-full",
-              focus.kind === "security" ? "bg-critical/12 text-critical" : focus.kind === "craft" ? "bg-brand-soft text-brand" : "bg-good/12 text-good",
+              focus.kind === "security" ? "bg-critical/12 text-critical" : focus.kind === "craft" ? "bg-brand-soft text-brand-text" : "bg-good/12 text-good",
             )}
           >
             {focus.kind === "none" ? <ShieldCheck className="size-5" aria-hidden /> : <Target className="size-5" aria-hidden />}
           </span>
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Focus area</div>
-            <p className="font-medium">{focus.title}</p>
+            <div className="eyebrow">Focus area</div>
+            <p className="card-title mt-0.5">{focus.title}</p>
             <p className="mt-1 flex gap-1.5 text-sm text-muted-foreground">
               <Lightbulb className="mt-0.5 size-4 shrink-0" aria-hidden /> {focus.tip}
             </p>
@@ -170,7 +172,7 @@ export default async function DeveloperPage({ params }: Params) {
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
           <section className="card-surface space-y-5 p-5" aria-labelledby="breakdown-title">
-            <h2 id="breakdown-title" className="font-semibold">
+            <h2 id="breakdown-title" className="card-title">
               Score breakdown
             </h2>
             <ScoreBar label="Security" value={d.security_score} max={MAX_SECURITY} color={SECURITY_COLOR} />
@@ -208,7 +210,7 @@ export default async function DeveloperPage({ params }: Params) {
             </dl>
           </section>
           <section className="card-surface p-5 lg:col-span-2" aria-labelledby="history-title">
-            <h2 id="history-title" className="mb-1 font-semibold">
+            <h2 id="history-title" className="card-title mb-1">
               Score history
             </h2>
             <p className="mb-3 text-sm text-muted-foreground">Security and craft stack up to the total score.</p>
@@ -218,13 +220,13 @@ export default async function DeveloperPage({ params }: Params) {
 
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
           <section className="card-surface p-5" aria-labelledby="cwe-title">
-            <h2 id="cwe-title" className="mb-4 flex items-center gap-2 font-semibold">
+            <h2 id="cwe-title" className="card-title mb-4 flex items-center gap-2">
               <Bug className="size-4 text-muted-foreground" aria-hidden /> Confirmed vulnerabilities
             </h2>
             <CountList counts={d.cwe_counts} label={cweName} empty="None confirmed. Keep it up." />
           </section>
           <section className="card-surface p-5" aria-labelledby="smell-title">
-            <h2 id="smell-title" className="mb-4 flex items-center gap-2 font-semibold">
+            <h2 id="smell-title" className="card-title mb-4 flex items-center gap-2">
               <Sparkles className="size-4 text-muted-foreground" aria-hidden /> Code smells
             </h2>
             <CountList counts={d.smell_counts} empty="No recurring smells." />

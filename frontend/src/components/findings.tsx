@@ -70,7 +70,7 @@ export function FixList({ findings, graphSymbols }: { findings: Finding[]; graph
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-xs text-muted-foreground">{i + 1}.</span>
               <SeverityBadge severity={f.severity} />
-              <h3 className="font-semibold">{name ?? <RichText text={f.title} />}</h3>
+              <h3 className="card-title">{name ?? <RichText text={f.title} />}</h3>
               {f.cwe && <span className="font-mono text-xs text-muted-foreground">{f.cwe}</span>}
               <span className="ml-auto">
                 <SourceLabel f={f} />

@@ -64,8 +64,8 @@ export function QualityPanel({ push, metrics }: { push: Push; metrics: QualityMe
         </div>
 
         <div className="card-surface p-5">
-          <h3 className="flex items-center gap-2 text-sm font-semibold">
-            <Lightbulb className="size-4 text-brand" aria-hidden /> Quick wins
+          <h3 className="card-title flex items-center gap-2">
+            <Lightbulb className="size-4 text-brand-text" aria-hidden /> Quick wins
           </h3>
           {wins.length === 0 ? (
             <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
@@ -75,7 +75,7 @@ export function QualityPanel({ push, metrics }: { push: Push; metrics: QualityMe
             <ul className="mt-3 space-y-2 text-sm">
               {wins.map((w) => (
                 <li key={w} className="flex gap-2">
-                  <span className="mt-2 size-1.5 shrink-0 rounded-full bg-brand" aria-hidden />
+                  <span className="mt-2 size-1.5 shrink-0 rounded-full bg-foreground" aria-hidden />
                   {w}
                 </li>
               ))}

@@ -99,7 +99,8 @@ export default async function PushPage({ params }: Params) {
         )}
 
         <header>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{subject}</h1>
+          <div className="eyebrow mb-2">Push review · {push.short_sha}</div>
+          <h1 className="font-display text-5xl font-black leading-[0.9] tracking-tight sm:text-6xl">{subject}</h1>
           {body.join("\n").trim() && (
             <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{body.join("\n").trim()}</p>
           )}
@@ -140,17 +141,18 @@ export default async function PushPage({ params }: Params) {
         </header>
 
         <section
-          className={cn("card-surface mt-6 overflow-hidden", style.surface)}
+          className={cn("plate mt-6 overflow-hidden", style.surface)}
           aria-label="Check result"
         >
+          {verdict.state === "failed" && <div className="hazard-tape h-3 border-b-2 border-foreground" aria-hidden />}
           <div className="flex flex-col gap-5 p-5 md:flex-row md:items-center">
             <div className="flex min-w-0 flex-1 gap-4">
-              <span className={cn("grid size-12 shrink-0 place-items-center rounded-full", style.tone)}>
+              <span className={cn("grid size-14 shrink-0 place-items-center rounded-[6px] border-2 border-foreground", style.tone)}>
                 <style.icon className={cn("size-6", verdict.state === "scanning" && "animate-spin")} aria-hidden />
               </span>
               <div className="min-w-0">
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">GitHub check</div>
-                <h2 className="text-xl font-semibold">{verdict.title}</h2>
+                <div className="eyebrow mb-1">GitHub check</div>
+                <h2 className="font-display text-4xl font-black uppercase leading-none">{verdict.title}</h2>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{verdict.detail}</p>
               </div>
             </div>
@@ -158,7 +160,7 @@ export default async function PushPage({ params }: Params) {
               <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-t pt-4 md:shrink-0 md:flex-nowrap md:border-l md:border-t-0 md:pl-6 md:pt-0">
                 <div>
                   <div className="text-xs text-muted-foreground">Points</div>
-                  <PointsDelta value={push.points_delta} className="text-3xl font-semibold" />
+                  <PointsDelta value={push.points_delta} className="font-display text-5xl font-black" />
                 </div>
                 <div className="min-w-0 flex-1 space-y-1 md:min-w-44 md:flex-none">
                   <ScoreMove label="Total" before={push.composite_before} after={push.composite_after} />
@@ -170,7 +172,7 @@ export default async function PushPage({ params }: Params) {
           </div>
           {push.ai_summary && (
             <div className="flex gap-3 border-t bg-card/60 px-5 py-4 text-sm">
-              <Bot className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />
+              <Bot className="mt-0.5 size-4 shrink-0 text-brand-text" aria-hidden />
               <div>
                 <span className="font-medium">What changed: </span>
                 <span className="leading-relaxed text-muted-foreground"><RichText text={push.ai_summary} /></span>

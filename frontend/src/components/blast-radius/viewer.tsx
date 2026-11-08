@@ -216,7 +216,7 @@ function IncidentScope({
   return (
     <aside className="card-surface self-start overflow-hidden" aria-labelledby="scope-title">
       <header className="border-b px-4 py-3">
-        <h3 id="scope-title" className="font-semibold">
+        <h3 id="scope-title" className="card-title">
           Affected files
         </h3>
         <p className="text-xs text-muted-foreground">
@@ -466,7 +466,7 @@ export function BlastRadiusViewer({
         {flow && (
           <section aria-label="Selected attack path" className="card-surface p-4">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-semibold">Attack path, step by step</h3>
+              <h3 className="card-title">Attack path, step by step</h3>
               {flow.rule && (
                 <Tooltip>
                   <TooltipTrigger asChild>

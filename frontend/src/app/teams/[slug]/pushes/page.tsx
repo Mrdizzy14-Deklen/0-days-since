@@ -34,7 +34,8 @@ export default async function TeamPushesPage({ params }: Params) {
       <PageShell>
         <div className="mx-auto max-w-3xl">
           <div className="mb-6">
-            <h1 className="text-2xl font-semibold tracking-tight">Pushes</h1>
+            <div className="eyebrow mb-2">Incident log</div>
+            <h1 className="font-display text-6xl font-black uppercase leading-none tracking-tight">Pushes</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Every scanned push, newest first. Filter by result or developer, or search, then open
               one for the full review.

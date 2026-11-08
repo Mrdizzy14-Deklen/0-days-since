@@ -17,7 +17,7 @@ function Section({ title, icon: Icon, children }: { title: string; icon: React.C
   return (
     <section className="space-y-2">
       <h3 className="flex items-center gap-2 text-sm font-semibold">
-        <Icon className="size-4 text-brand" aria-hidden /> {title}
+        <Icon className="size-4 text-brand-text" aria-hidden /> {title}
       </h3>
       <div className="space-y-2 text-sm leading-relaxed text-muted-foreground">{children}</div>
     </section>

@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Atkinson_Hyperlegible_Next, Big_Shoulders, Big_Shoulders_Stencil, Martian_Mono } from "next/font/google";
 
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+/** Signage condensed for headings and scoreboard numerals. */
+const signage = Big_Shoulders({ variable: "--font-signage", subsets: ["latin"], axes: ["opsz"] });
+/** Stencil cut for the "days since last incident" sign. */
+const stencil = Big_Shoulders_Stencil({ variable: "--font-stencil-face", subsets: ["latin"], weight: ["800"] });
+/** Body text: designed by the Braille Institute for maximum legibility. */
+const body = Atkinson_Hyperlegible_Next({ variable: "--font-body", subsets: ["latin"] });
+/** Code, paths, SHAs. */
+const code = Martian_Mono({ variable: "--font-code", subsets: ["latin"], axes: ["wdth"] });
 
 export const metadata: Metadata = {
   title: { default: "ZeroDay Score", template: "%s · ZeroDay Score" },
@@ -18,7 +24,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable}`}
+      className={`${signage.variable} ${stencil.variable} ${body.variable} ${code.variable}`}
     >
       <body className="min-h-dvh font-sans antialiased">
         <Providers>{children}</Providers>

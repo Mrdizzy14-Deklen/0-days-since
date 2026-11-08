@@ -177,7 +177,7 @@ export function PushFeed({
     <section className="card-surface flex min-h-0 flex-col overflow-hidden" aria-labelledby="feed-title">
       <header className="space-y-3 border-b px-4 py-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 id="feed-title" className="font-semibold">
+          <h2 id="feed-title" className="font-display text-2xl font-extrabold uppercase leading-none">
             {variant === "compact" ? "Latest pushes" : "All pushes"}
           </h2>
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
@@ -198,7 +198,7 @@ export function PushFeed({
               onClick={() => setStatus(f.id)}
               className={cn(
                 "rounded-full border px-2.5 py-1 text-xs transition-colors",
-                status === f.id ? "border-brand bg-brand-soft font-medium text-foreground" : "text-muted-foreground hover:bg-muted",
+                status === f.id ? "border-foreground bg-brand font-semibold text-brand-foreground" : "text-muted-foreground hover:bg-muted",
               )}
             >
               {f.label} <span className="font-mono tabular-nums opacity-70">{counts[f.id]}</span>
@@ -273,7 +273,7 @@ export function PushFeed({
       {variant === "compact" ? (
         <Link
           href={`/teams/${slug}/pushes`}
-          className="flex items-center justify-center gap-1 border-t px-4 py-3 text-sm font-medium text-brand hover:bg-muted/50"
+          className="flex items-center justify-center gap-1 border-t px-4 py-3 text-sm font-medium text-brand-text hover:bg-muted/50"
         >
           View all pushes <ArrowRight className="size-4" aria-hidden />
         </Link>
