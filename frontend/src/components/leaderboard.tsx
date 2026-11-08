@@ -17,10 +17,11 @@ import { CWE_TIPS, smellTip } from "@/lib/insights";
 import type { Developer } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+/** The "wall of shame": the three lowest scores, worst first. */
 const MEDAL = [
-  { label: "1st", ring: "ring-[#c99a1c]", chip: "bg-[#e9b923] text-[#12120f]" },
-  { label: "2nd", ring: "ring-[#9a9a92]", chip: "bg-[#c4c3bb] text-[#12120f]" },
-  { label: "3rd", ring: "ring-[#a8673a]", chip: "bg-[#c98a5c] text-[#12120f]" },
+  { label: "Worst", ring: "ring-[#d03b3b]", chip: "bg-[#d03b3b] text-white" },
+  { label: "2nd Worst", ring: "ring-[#ec835a]", chip: "bg-[#ec835a] text-[#12120f]" },
+  { label: "3rd Worst", ring: "ring-[#fab219]", chip: "bg-[#fab219] text-[#12120f]" },
 ];
 
 export function Movement({ value }: { value: number | null | undefined }) {
@@ -145,10 +146,11 @@ function PodiumCard({ d, place, movement, isYou }: { d: Developer; place: number
     <Link
       href={`/developers/${d.id}`}
       className={cn(
-        "plate group flex flex-col gap-4 p-4 transition-transform duration-200 hover:-translate-x-0.5 hover:-translate-y-0.5",
+        "plate group flex flex-col gap-4 overflow-hidden p-4 transition-transform duration-200 hover:-translate-x-0.5 hover:-translate-y-0.5",
         isYou && "outline-4 outline-offset-2 outline-[var(--brand)]",
       )}
     >
+      {place === 0 && <div className="hazard-tape -mx-4 -mt-4 h-2.5" aria-hidden />}
       <div className="flex items-center justify-between">
         <span className={cn("rounded-[3px] border-2 border-foreground px-2 py-0.5 font-display text-base font-black uppercase leading-none", medal.chip)}>
           {medal.label}
@@ -253,8 +255,9 @@ export function Leaderboard({
       </div>
     );
   }
-  const podium = developers.length >= 3 ? developers.slice(0, 3) : [];
-  const rest = developers.slice(podium.length);
+  // Bottom three get the cards (worst first); everyone else is ranked below, best first.
+  const podium = developers.length >= 3 ? developers.slice(-3).reverse() : [];
+  const rest = developers.slice(0, developers.length - podium.length);
   return (
     <div className="space-y-4">
       {podium.length > 0 && (

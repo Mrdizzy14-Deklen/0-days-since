@@ -20,7 +20,7 @@ With the backend running and the demo team seeded (`backend/seed_demo.py`), open
 
 | Route | What it shows |
 |---|---|
-| `/teams/[slug]` | **Overview**: the repo name, the "days since last incident" board, the leaderboard (podium + ranked rows: composite, Security /700 and Craft /300 bars, pushes vs. faulty, streak, 7-day rank change, most frequent CWE / code smell) and the live feed of latest pushes |
+| `/teams/[slug]` | **Overview**: the repo name, the "days since last incident" board, the leaderboard (the bottom three as "Worst / 2nd Worst / 3rd Worst" cards, then everyone else ranked best first: composite, Security /700 and Craft /300 bars, pushes vs. faulty, streak, 7-day rank change, most frequent CWE / code smell) and the live feed of latest pushes |
 | `/teams/[slug]/pushes` | **Pushes**: every push with result and developer filters, search, grouped by day |
 | `/teams/[slug]/settings` | **Settings** (gear icon): connect a Discord channel that is told about every faulty push (optionally warnings too); team members only |
 | `/teams/[slug]/data` | **Data**: team averages, score over time (chart + table view), top weaknesses with fix tips, connected repositories |
