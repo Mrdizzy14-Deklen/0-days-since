@@ -29,7 +29,8 @@ def get_engine() -> AsyncEngine:
         connect_args: dict = {}
         if settings.database_url.startswith("postgresql+asyncpg") and settings.database_ssl:
             # Tiger Data / Timescale Cloud require TLS.
-            connect_args["ssl"] = ssl.create_default_context()
+            connect_args["ssl"] = ssl.create_default_context(
+                cafile=settings.database_ssl_root_cert or None)
         _engine = create_async_engine(
             settings.database_url,
             echo=settings.database_echo,

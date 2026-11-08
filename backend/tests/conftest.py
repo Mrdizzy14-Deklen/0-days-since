@@ -35,6 +35,8 @@ os.environ.update({
     "API_TOKEN": "",
     "FRONTEND_ORIGIN": "http://dash.test",
     "ENABLE_TIMESCALE": "false",
+    "DATABASE_SSL": "false",
+    "AGENT_OPEN_FIX_PRS": "false",
 })
 
 

@@ -117,6 +117,13 @@ class GraphTools:
         exact = self.graph.symbol(name)
         if exact is not None:
             return [exact]
+        if ":" not in name and "." in name:
+            # Models often write a dotted path: "app.services.billing.BillingService.get".
+            parts = name.split(".")
+            for i in range(len(parts) - 1, 0, -1):
+                hit = self.graph.symbol(".".join(parts[:i]) + ":" + ".".join(parts[i:]))
+                if hit is not None:
+                    return [hit]
         syms = [s for s in self.graph._symbols.values() if s.kind is not SymbolKind.MODULE]
         tail = name.split(":")[-1]
         for test in (lambda s: s.qualname == tail,
@@ -360,5 +367,6 @@ def build_brief(*, repo: str, changed_files: list[str], commit_message: str, dif
         "## Deterministic findings & cross-file candidates\n"
         + json.dumps(candidates, indent=1)
         + f"\n\n## Readability metrics for the changed code\n{json.dumps(metrics)}\n\n"
-        "Write your plan, then start investigating."
+        "Your first reply MUST include \"plan\" (3-6 short steps) together with your first "
+        "tool call. Then investigate."
     )

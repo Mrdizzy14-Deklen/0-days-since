@@ -47,6 +47,9 @@ def test_graph_tools_answer_from_the_real_graph() -> None:
     assert "app/db.py" in tools.search("execute(")
     assert tools.run("rm_rf", {}).startswith("Unknown tool")
     assert "No symbol" in tools.symbol("does_not_exist_anywhere")
+    # dotted paths (how models usually write them) resolve to node ids
+    assert tools.resolve("app.services.user_service.UserService.find_user")[0].node_id == \
+        "app.services.user_service:UserService.find_user"
 
 
 async def test_agent_plans_investigates_and_reports() -> None:

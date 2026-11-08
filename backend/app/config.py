@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://zeroday:zeroday@localhost:5432/zeroday"
     database_ssl: bool = False
+    # Tiger Cloud signs server certificates with its own CA (ca.timescale.com), which public CA
+    # bundles don't include. Point this at that CA certificate (PEM) to verify the server.
+    database_ssl_root_cert: str = ""
     database_echo: bool = False
     enable_timescale: bool = True
 
