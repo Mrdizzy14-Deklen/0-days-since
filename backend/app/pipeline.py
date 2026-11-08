@@ -25,7 +25,7 @@ from app import discord
 from app.ai_scanner import AIScanner, ScanFinding, ScanInput, ScanResult
 from app.ast_engine import BlastRadius, ProjectGraph, changed_lines_from_patch
 from app.config import Settings, get_settings
-from app.db import session_scope
+from app.db import refresh_daily_view, session_scope
 from app.enums import (
     CheckConclusion,
     EventType,
@@ -47,6 +47,7 @@ from app.models import (
     Repository,
     ScoreSnapshot,
     Team,
+    TeamIntegration,
 )
 from app.scoring import PushScore, apply_push, craft_subscores
 
@@ -393,19 +394,73 @@ async def _deactivate_team(session: AsyncSession, team: Team) -> None:
         session.add(r)
 
 
+async def delete_team_data(session: AsyncSession, team: Team) -> None:
+    """Permanently remove a team (one repository) and everything recorded about it: its page,
+    pushes, findings, scores, code graph, developers and integrations. Explicit deletes in
+    dependency order, so it does not rely on ON DELETE CASCADE existing in older databases."""
+    repo_ids = list((await session.exec(select(Repository.id).where(
+        Repository.team_id == team.id))).all())
+    push_ids = select(PushEvent.id).where(PushEvent.team_id == team.id)
+    await session.exec(delete(Finding).where(col(Finding.push_event_id).in_(push_ids)))
+    if repo_ids:
+        for model in (Finding, CodeEdge, CodeSymbol, RepoFile):
+            await session.exec(delete(model).where(col(model.repository_id).in_(repo_ids)))
+    await session.exec(delete(ScoreSnapshot).where(ScoreSnapshot.team_id == team.id))
+    await session.exec(delete(PushEvent).where(PushEvent.team_id == team.id))
+    await session.exec(delete(Repository).where(Repository.team_id == team.id))
+    await session.exec(delete(Developer).where(Developer.team_id == team.id))
+    await session.exec(delete(TeamIntegration).where(TeamIntegration.team_id == team.id))
+    await session.exec(delete(Team).where(Team.id == team.id))
+    for repo_id in repo_ids:
+        graph_cache.drop(repo_id)
+    logger.info("deleted team %s (%s) and all of its data", team.slug, team.id)
+
+
+async def handle_repository_event(payload: dict[str, Any]) -> bool:
+    """`repository.deleted`: the repo is gone on GitHub, so its page and data go too."""
+    if payload.get("action") != "deleted":
+        return False
+    repo_id = int((payload.get("repository") or {}).get("id") or 0)
+    installation_id = int((payload.get("installation") or {}).get("id") or 0)
+    async with installation_lock(installation_id), session_scope() as session:
+        team = (await session.exec(select(Team).where(Team.github_repo_id == repo_id))).first()
+        if team is None:
+            return False
+        await delete_team_data(session, team)
+    await refresh_daily_view()
+    return True
+
+
 async def handle_installation_event(event: str, payload: dict[str, Any], *,
                                     transport: Any = None) -> list[int]:
     """installation / installation_repositories: sync team + repos, build baselines."""
     action = payload.get("action")
     installation = payload["installation"]
     installation_id = int(installation["id"])
+    deleted_any = event == "installation_repositories" and bool(
+        payload.get("repositories_removed")) or (event == "installation" and action == "deleted")
+    try:
+        return await _sync_installation(event, action, payload, installation, installation_id,
+                                        transport)
+    finally:
+        if deleted_any:
+            await refresh_daily_view()
+
+
+async def _sync_installation(event: str, action: Any, payload: dict[str, Any],
+                             installation: dict[str, Any], installation_id: int,
+                             transport: Any) -> list[int]:
     repo_ids: list[int] = []
     async with installation_lock(installation_id), session_scope() as session:
         if event == "installation" and action in {"deleted", "suspend"}:
             teams = (await session.exec(select(Team).where(
                 Team.github_installation_id == installation_id))).all()
             for team in teams:
-                await _deactivate_team(session, team)
+                # Uninstalled: the data goes. Suspended: reversible, so only hidden.
+                if action == "deleted":
+                    await delete_team_data(session, team)
+                else:
+                    await _deactivate_team(session, team)
             return []
         if event == "installation" and action == "unsuspend":
             teams = (await session.exec(select(Team).where(
@@ -420,10 +475,11 @@ async def handle_installation_event(event: str, payload: dict[str, Any], *,
                     repo_ids.append(r.id)
         account = installation.get("account") or {}
         for removed in payload.get("repositories_removed") or []:
+            # Removed from the App (also what GitHub sends when a selected repo is deleted).
             team = (await session.exec(select(Team).where(
                 Team.github_repo_id == int(removed["id"])))).first()
             if team is not None:
-                await _deactivate_team(session, team)
+                await delete_team_data(session, team)
         for r in payload.get("repositories") or payload.get("repositories_added") or []:
             team = await upsert_team(session, installation_id, account, r)
             row = await upsert_repository(session, team, {

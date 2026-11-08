@@ -93,6 +93,21 @@ async def init_db() -> None:
 
 DAILY_VIEW = "team_daily_scores"
 
+
+async def refresh_daily_view() -> None:
+    """Re-materialize the daily roll-up (e.g. after a team is deleted, so its rows go too).
+    Best-effort: a no-op without TimescaleDB."""
+    engine = get_engine()
+    if engine.dialect.name != "postgresql" or not get_settings().enable_timescale:
+        return
+    try:
+        async with engine.connect() as conn:
+            conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
+            await conn.execute(text(
+                f"CALL refresh_continuous_aggregate('{DAILY_VIEW}', NULL, NULL)"))
+    except Exception as exc:
+        logger.warning("could not refresh %s: %s", DAILY_VIEW, str(exc).splitlines()[0])
+
 # Per-team daily roll-up of every scored push, maintained by TimescaleDB. Real-time
 # aggregation (materialized_only = false) adds rows newer than the last refresh on the fly.
 _TIMESCALE_EXTRAS = [

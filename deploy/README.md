@@ -44,7 +44,7 @@ Check: `https://zero-days-since.work/play` and `https://api.zero-days-since.work
 | Webhook URL | `https://api.zero-days-since.work/api/webhooks/github` |
 | Webhook secret | `openssl rand -hex 32` |
 | Permissions | Checks, Contents, Pull requests: Read & write · Metadata: Read |
-| Events | Push, Pull request |
+| Events | Push, Pull request, Repository (so a deleted repo deletes its page and data) |
 
 Then put the private key at `backend/certs/github-app.pem` and add to `backend/.env`:
 

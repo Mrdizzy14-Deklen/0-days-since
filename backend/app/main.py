@@ -23,6 +23,7 @@ from app.github_app import verify_webhook_signature
 from app.migrations import migrate
 from app.pipeline import (
     handle_installation_event,
+    handle_repository_event,
     job_from_pull_request,
     job_from_push,
     resume_interrupted_scans,
@@ -104,6 +105,9 @@ async def github_webhook(
     if event in {"installation", "installation_repositories"}:
         background.add_task(handle_installation_event, event, payload)
         queued = "installation"
+    elif event == "repository":
+        background.add_task(handle_repository_event, payload)
+        queued = "repository"
     elif event == "push":
         job = job_from_push(payload, x_github_delivery)
         if job is not None:
