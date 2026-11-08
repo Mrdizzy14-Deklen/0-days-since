@@ -43,7 +43,7 @@ chmod 600 "$APP"/backend/certs/*.pem 2>/dev/null || true
 echo "==> Backend"
 [ -f "$APP/backend/.env" ] || { echo "Missing $APP/backend/.env (run deploy/push.sh from your laptop)"; exit 1; }
 sed -i "s|^FRONTEND_ORIGIN=.*|FRONTEND_ORIGIN=https://$DOMAIN|" "$APP/backend/.env"
-sudo -u zeroday -H bash -c "cd $APP/backend && uv venv -q --python 3.12 .venv && uv pip install -q --python .venv/bin/python -e ."
+sudo -u zeroday -H bash -c "cd $APP/backend && { [ -x .venv/bin/python ] || uv venv -q --python 3.12 .venv; } && uv pip install -q --python .venv/bin/python -e ."
 
 echo "==> Dashboard"
 ENVF="$APP/frontend/.env.production.local"
