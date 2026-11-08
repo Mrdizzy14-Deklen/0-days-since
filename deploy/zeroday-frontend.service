@@ -9,6 +9,7 @@ Group=zeroday
 WorkingDirectory=/opt/zeroday/frontend
 Environment=NODE_ENV=production
 ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -p 3000 -H 127.0.0.1
+TimeoutStopSec=10
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
