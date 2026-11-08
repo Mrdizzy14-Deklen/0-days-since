@@ -1,0 +1,39 @@
+# 0 Days Since: HTTPS front door (certificates are issued and renewed automatically).
+# Needs DNS A records for zero-days-since.work, www and api pointing at this server first.
+
+zero-days-since.work {
+	# Dashboard (Next.js). SSE live feed: flush immediately.
+	reverse_proxy 127.0.0.1:3000 {
+		flush_interval -1
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+www.zero-days-since.work {
+	redir https://zero-days-since.work{uri} permanent
+}
+
+api.zero-days-since.work {
+	# Only GitHub's webhook and the health check are public. The dashboard API stays
+	# private: the Next.js server reaches it on 127.0.0.1.
+	@public path /api/webhooks/github /api/health
+	handle @public {
+		request_body {
+			max_size 25MB
+		}
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle {
+		respond "Not found" 404
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}

@@ -1,0 +1,21 @@
+[Unit]
+Description=0 Days Since backend (FastAPI scanner + API)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=zeroday
+Group=zeroday
+WorkingDirectory=/opt/zeroday/backend
+# One worker on purpose: the code-graph cache and per-repo scan locks live in memory.
+ExecStart=/opt/zeroday/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/zeroday/backend
+
+[Install]
+WantedBy=multi-user.target
