@@ -42,7 +42,7 @@ export function LogoMark({ days = null, className }: { days?: number | null; cla
 export function Wordmark({ className }: { className?: string }) {
   return (
     <span className={cn("font-display text-xl font-extrabold uppercase leading-none tracking-wide", className)}>
-      0 Days Since
+      Days Since
     </span>
   );
 }

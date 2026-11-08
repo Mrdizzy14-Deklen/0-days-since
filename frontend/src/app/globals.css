@@ -163,8 +163,18 @@
   --brand-foreground: var(--ink);
   --brand-text: var(--hivis-ink);
   --brand-soft: color-mix(in oklab, var(--hivis) 38%, transparent);
-  --plate-shadow: 4px 4px 0 var(--ink);
+  --plate-shadow: 5px 5px 0 var(--outline);
   --grid-line: color-mix(in oklab, var(--ink) 6%, transparent);
+
+  /* Comic / cel-shaded layer: one inking color, hard shadows, halftone shading. */
+  --outline: var(--ink);
+  --cel-shadow: 3px 3px 0 var(--outline);
+  --cel-rim: inset -3px -3px 0 color-mix(in oklab, var(--ink) 7%, transparent);
+  --paper-dot: color-mix(in oklab, var(--ink) 9%, transparent);
+  --halftone-opacity: 0.22;
+  --halftone-blend: multiply;
+  --halftone-invert: 0;
+  --pop-shadow: 3px 3px 0 var(--brand);
 
   --background: var(--paper);
   --foreground: var(--ink);
@@ -209,8 +219,16 @@
 
   --brand-foreground: #12120f;
   --brand-soft: color-mix(in oklab, var(--hivis) 16%, transparent);
-  --plate-shadow: 4px 4px 0 #000;
+  --plate-shadow: 5px 5px 0 var(--outline);
   --grid-line: color-mix(in oklab, var(--ink) 4%, transparent);
+
+  --outline: #000;
+  --cel-rim: inset -3px -3px 0 rgb(0 0 0 / 0.35);
+  --paper-dot: color-mix(in oklab, var(--ink) 7%, transparent);
+  --halftone-opacity: 0.24;
+  --halftone-blend: screen;
+  --halftone-invert: 1;
+  --pop-shadow: 3px 3px 0 #000;
 
   --primary: var(--hivis);
   --primary-foreground: #12120f;
@@ -239,34 +257,107 @@
   --font-stencil: var(--font-stencil-face), var(--font-signage), "Arial Narrow", sans-serif;
 }
 
-/* ----- Atmosphere: engineering-paper grid + fine grain, fixed behind everything ----- */
+/* ----- Atmosphere: comic-print paper, Ben-Day dots on an offset grid + fine grain ----- */
 body {
   background-color: var(--background);
   background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+    radial-gradient(var(--paper-dot) 1.1px, transparent 1.6px),
+    radial-gradient(var(--paper-dot) 1.1px, transparent 1.6px),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 28px 28px, 28px 28px, 160px 160px;
+  background-size: 14px 14px, 14px 14px, 160px 160px;
+  background-position: 0 0, 7px 7px, 0 0;
   background-attachment: fixed;
 }
 
-/* ----- Surfaces ----- */
+/* ----- Surfaces: inked panels, cel-shaded ----- */
+/* Every panel is inked (solid outline + hard offset shadow, no blur) with a flat shade band on
+ * its bottom/right inner edge: two tones and a hard terminator, the cel-shading look. */
 .card-surface {
+  position: relative;
+  isolation: isolate;
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 2px solid var(--outline);
   border-radius: var(--radius-lg);
+  box-shadow: var(--cel-rim), var(--cel-shadow);
 }
 
-/* A "plate": the enamel sign treatment for the few elements that matter most. */
+/* A "plate": the heavier treatment for the few elements that matter most. */
 .plate {
+  position: relative;
+  isolation: isolate;
   background: var(--card);
-  border: 2px solid var(--ink);
+  border: 3px solid var(--outline);
   border-radius: var(--radius-md);
-  box-shadow: var(--plate-shadow);
+  box-shadow: var(--cel-rim), var(--plate-shadow);
 }
 
-.dark .plate {
-  border-color: #000;
+/*
+ * Halftone dithering in each panel's shadowed corner. A dot screen is multiplied with a tone
+ * ramp, then thresholded with contrast(): where the ramp is darker the dots come out bigger, so
+ * the shading is made of dots that grow toward the corner (real halftone, not faded dots). It
+ * sits under the content (z-index -1 inside the isolated panel) and is blended onto the panel.
+ */
+.card-surface::after,
+.plate::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 100% 100%, #6c6c6c 0, #fff var(--halftone-reach, 300px)),
+    radial-gradient(closest-side, #aaa, #fff) 0 0 / 7px 7px;
+  background-blend-mode: multiply;
+  filter: contrast(18) invert(var(--halftone-invert));
+  mix-blend-mode: var(--halftone-blend);
+  opacity: var(--halftone-opacity);
+}
+
+.plate::after {
+  --halftone-reach: 420px;
+  background-size: auto, 8px 8px;
+}
+
+/* Inked controls: buttons and badges get the outline and a hard shadow; buttons press in. */
+[data-slot="button"]:is([data-variant="default"], [data-variant="outline"], [data-variant="secondary"], [data-variant="destructive"]) {
+  border: 2px solid var(--outline);
+  box-shadow: 2px 2px 0 var(--outline);
+  transition:
+    transform 80ms ease-out,
+    box-shadow 80ms ease-out,
+    background-color 120ms;
+}
+
+[data-slot="button"][data-variant="default"] {
+  background: var(--brand);
+  color: var(--brand-foreground);
+  font-weight: 700;
+}
+
+[data-slot="button"][data-variant="default"]:hover {
+  background: color-mix(in oklab, var(--brand) 85%, var(--ink));
+}
+
+[data-slot="button"]:is([data-variant="default"], [data-variant="outline"], [data-variant="secondary"], [data-variant="destructive"]):hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--outline);
+}
+
+[data-slot="button"]:is([data-variant="default"], [data-variant="outline"], [data-variant="secondary"], [data-variant="destructive"]):active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--outline);
+}
+
+[data-slot="badge"] {
+  border: 1.5px solid var(--outline);
+  box-shadow: 1.5px 1.5px 0 var(--outline);
+}
+
+/* Pop-art headings: a hard offset shadow in the accent (black on the night shift). */
+h1.font-display,
+h2.font-display {
+  text-shadow: var(--pop-shadow);
 }
 
 /* Hazard tape, used only where a merge is blocked (status: critical). */
@@ -374,6 +465,10 @@ body {
   .feed-in,
   .beacon {
     animation: none;
+  }
+
+  [data-slot="button"] {
+    transition: none;
   }
 }
 
