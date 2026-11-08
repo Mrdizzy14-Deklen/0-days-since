@@ -20,9 +20,11 @@ Guardrails (the code under review is attacker-controlled input to the LLM):
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -142,6 +144,10 @@ class CraftAdjustment:
     notes: str = ""
 
 
+def _ms(t0: float) -> int:
+    return int((time.perf_counter() - t0) * 1000)
+
+
 @dataclass(slots=True)
 class ScanResult:
     findings: list[ScanFinding]
@@ -152,6 +158,8 @@ class ScanResult:
     prompt_injection: bool = False
     errors: list[str] = field(default_factory=list)
     agent: AgentRun | None = None
+    # Wall-clock milliseconds per AI phase (agent_ms, skeptic_ms, ai_total_ms, ...).
+    timings: dict[str, int] = field(default_factory=dict)
 
     @property
     def verified_vulnerabilities(self) -> list[ScanFinding]:
@@ -331,8 +339,12 @@ def _candidate_brief(f: ScanFinding) -> dict[str, Any]:
 
 class AIScanner:
     def __init__(self, llm: LLMClient | None = None, *, context_chars: int = 60_000,
-                 agent_enabled: bool = True, agent_max_steps: int = 10) -> None:
+                 agent_enabled: bool = True, agent_max_steps: int = 10,
+                 agent_llm: LLMClient | None = None) -> None:
         self.llm = llm if llm is not None else LLMClient.from_settings()
+        # Optional faster model for the agent's many investigation turns; the skeptic and the
+        # fixer keep the main model.
+        self.agent_llm = agent_llm or self.llm
         self.context_chars = context_chars
         self.agent_enabled = agent_enabled
         self.agent_max_steps = agent_max_steps
@@ -374,18 +386,30 @@ class AIScanner:
         model: str | None = None
         ai_used = False
 
+        timings: dict[str, int] = {}
         if self.llm.available:
             context = graph.slice_prompt_context(inp.radius, max_chars=self.context_chars)
+            # The skeptic reviews the code-analysis candidates WHILE the agent investigates
+            # (they do not depend on each other); anything new the agent reports is verified in
+            # a second, smaller skeptic call afterwards.
+            static_to_verify = [f for f in security if f.rule_id != "ZD-AI-001"]
+            started = time.perf_counter()
+            skeptic = asyncio.create_task(self._timed_pass2(context, static_to_verify)) \
+                if static_to_verify else None
             try:
                 report: dict[str, Any] | None = None
                 if self.agent_enabled:
+                    t0 = time.perf_counter()
                     agent_run = await self._agent_pass1(inp, security)
+                    timings["agent_ms"] = _ms(t0)
                     if agent_run.finished and agent_run.report is not None:
                         report, model = agent_run.report, agent_run.model
                     else:
                         errors.append(f"agent: {agent_run.error}; used one-shot review")
                 if report is None:
+                    t0 = time.perf_counter()
                     p1 = await self._pass1(inp, context, security)
+                    timings["one_shot_ms"] = _ms(t0)
                     report, model = p1.data, p1.model
                 ai_used = True
                 summary = str(report.get("summary") or "")[:2000]
@@ -396,17 +420,27 @@ class AIScanner:
             except LLMError as exc:
                 errors.append(f"pass1: {exc}")
                 logger.warning("AI pass 1 failed: %s", exc)
-            to_verify = [f for f in security if f.rule_id != "ZD-AI-001"]
-            if to_verify:
+                ai_vulns = []
+
+            batches: list[tuple[list[ScanFinding], Any]] = []
+            if skeptic is not None:
+                batches.append((static_to_verify, skeptic))
+            if ai_vulns:
+                batches.append((ai_vulns, asyncio.create_task(
+                    self._timed_pass2(context, ai_vulns))))
+            for candidates, task in batches:
                 try:
-                    p2 = await self._pass2(context, to_verify)
+                    p2, elapsed = await task
+                    timings["skeptic_ms"] = timings.get("skeptic_ms", 0) + elapsed
                     model = model or p2.model
                     ai_used = True
-                    self._apply_verdicts(to_verify, p2.data, protect_static=bool(injection_hits))
+                    self._apply_verdicts(candidates, p2.data,
+                                         protect_static=bool(injection_hits))
                 except LLMError as exc:
                     errors.append(f"pass2: {exc}")
                     logger.warning("AI pass 2 failed: %s", exc)
-                    self._deterministic_verdicts(to_verify)
+                    self._deterministic_verdicts(candidates)
+            timings["ai_total_ms"] = _ms(started)
         else:
             self._deterministic_verdicts([f for f in security if f.rule_id != "ZD-AI-001"])
 
@@ -421,12 +455,12 @@ class AIScanner:
         return ScanResult(findings=security + quality, summary=summary,
                           craft_adjustment=adjustment, ai_used=ai_used, model=model,
                           prompt_injection=bool(injection_hits), errors=errors,
-                          agent=agent_run)
+                          agent=agent_run, timings=timings)
 
     # ---- pass 1 -------------------------------------------------------------------------
     async def _agent_pass1(self, inp: ScanInput, security: list[ScanFinding]) -> AgentRun:
         """Pass 1 as a Nemotron agent: plan, investigate the graph with tools, then report."""
-        agent = SecurityAgent(self.llm, max_steps=self.agent_max_steps)
+        agent = SecurityAgent(self.agent_llm, max_steps=self.agent_max_steps)
         brief = build_brief(
             repo=inp.repo_full_name, changed_files=sorted(inp.changed),
             commit_message=inp.commit_message, diff=_format_diff(inp.patches),
@@ -547,6 +581,11 @@ class AIScanner:
         return adj, issues
 
     # ---- pass 2 -------------------------------------------------------------------------
+    async def _timed_pass2(self, context: str, candidates: list[ScanFinding]):
+        t0 = time.perf_counter()
+        reply = await self._pass2(context, candidates)
+        return reply, _ms(t0)
+
     async def _pass2(self, context: str, candidates: list[ScanFinding]):
         user = (
             "## Candidates to verify\n"

@@ -133,3 +133,24 @@ async def test_agent_accepts_a_bare_report() -> None:
 
     result = await AIScanner(_client(handler)).scan(_input(graph, _db_change(graph)))
     assert result.agent is not None and result.agent.finished and result.summary == "direct"
+
+
+async def test_agent_can_use_a_faster_model_than_the_skeptic() -> None:
+    graph = ProjectGraph.from_sources(REPO)
+    models: dict[str, set[str]] = {"agent": set(), "skeptic": set()}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "adversarial skeptic" in body["messages"][0]["content"]:
+            models["skeptic"].add(body["model"])
+            return _reply({"verdicts": []})
+        models["agent"].add(body["model"])
+        return _reply({"summary": "direct", "vulnerabilities": []})
+
+    llm = _client(handler)
+    scanner = AIScanner(llm, agent_llm=llm.with_primary_model("nemotron-lightning"))
+    result = await scanner.scan(_input(graph, _db_change(graph)))
+    assert models == {"agent": {"nemotron-lightning"}, "skeptic": {"nemotron-agent"}}
+    assert result.agent is not None and result.agent.model == "nemotron-lightning"
+    assert {"agent_ms", "skeptic_ms", "ai_total_ms"} <= set(result.timings)
+    assert all("ms" in s for s in result.agent.to_dict()["steps"])

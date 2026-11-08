@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import logging
 import re
+import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -35,6 +36,7 @@ from app.enums import (
 )
 from app.fixer import FixAgent, FixProposal, fixable
 from app.github_app import NULL_SHA, GitHubApp, GitHubError
+from app.llm import LLMClient
 from app.models import (
     CodeEdge,
     CodeSymbol,
@@ -425,10 +427,7 @@ async def run_scan(job: ScanJob, *, gh_transport: Any = None,
 
             async with graph_cache.lock(repo_id):
                 await _scan_locked(gh, token, job, push_id, repo_id, dev_id, settings,
-                                   scanner or AIScanner(
-                                       context_chars=settings.llm_context_chars,
-                                       agent_enabled=settings.agent_enabled,
-                                       agent_max_steps=settings.agent_max_steps),
+                                   scanner or build_scanner(settings),
                                    owner, name, check_run_id, details_url)
         except Exception as exc:
             logger.exception("scan failed for push %s", push_id)
@@ -539,6 +538,7 @@ async def _scan_locked(gh: GitHubApp, token: str, job: ScanJob, push_id: int, re
         return
 
     # ---- 3. analysis -------------------------------------------------------------------
+    t_scan = time.perf_counter()
     radius = graph.blast_radius(changed, hops=settings.blast_radius_hops)
     quality = graph.quality_report(changed)
     result = await scanner.scan(ScanInput(
@@ -546,7 +546,12 @@ async def _scan_locked(gh: GitHubApp, token: str, job: ScanJob, push_id: int, re
         commit_message=job.commit_message, repo_full_name=job.repo["full_name"],
     ))
     craft = craft_subscores(quality, result.craft_adjustment)
+    t_fix = time.perf_counter()
     fixes = await run_fixes(gh, token, owner, name, job, graph, result, settings, scanner)
+    timings = {**result.timings, "fixes_ms": int((time.perf_counter() - t_fix) * 1000),
+               "analysis_ms": int((time.perf_counter() - t_scan) * 1000)}
+    logger.info("push %s timings: %s", push_id,
+                " ".join(f"{k}={v}" for k, v in timings.items()))
 
     # ---- 4. scoring + persistence -------------------------------------------------------
     async with session_scope() as session:
@@ -583,6 +588,7 @@ async def _scan_locked(gh: GitHubApp, token: str, job: ScanJob, push_id: int, re
         push.agent_trace = {
             "investigation": result.agent.to_dict() if result.agent else None,
             "fixes": [f.to_dict() for f in fixes],
+            "timings": timings,
         }
         if result.errors:
             push.error = "; ".join(result.errors)[:4000]
@@ -618,6 +624,14 @@ async def _scan_locked(gh: GitHubApp, token: str, job: ScanJob, push_id: int, re
 # --------------------------------------------------------------------------------------
 
 
+def build_scanner(settings: Settings) -> AIScanner:
+    llm = LLMClient.from_settings(settings)
+    return AIScanner(llm, context_chars=settings.llm_context_chars,
+                     agent_enabled=settings.agent_enabled,
+                     agent_max_steps=settings.agent_max_steps,
+                     agent_llm=llm.with_primary_model(settings.llm_agent_model))
+
+
 async def run_fixes(gh: GitHubApp, token: str, owner: str, name: str, job: ScanJob,
                     graph: ProjectGraph, result: ScanResult, settings: Settings,
                     scanner: AIScanner) -> list[FixProposal]:
@@ -631,9 +645,15 @@ async def run_fixes(gh: GitHubApp, token: str, owner: str, name: str, job: ScanJ
     branch = (job.ref or "").removeprefix("refs/heads/")
     # PRs only for branch pushes we can write to (not fork pull requests).
     can_open = settings.agent_open_fix_prs and job.event_type is EventType.PUSH and bool(branch)
+    # Each fix is proposed and re-verified independently (on its own copy of the graph), so
+    # they run concurrently; PRs are then opened one at a time.
+    results = await asyncio.gather(*(fixer.propose(graph, f) for f in targets),
+                                   return_exceptions=True)
     proposals: list[FixProposal] = []
-    for i, finding in enumerate(targets, start=1):
-        proposal = await fixer.propose(graph, finding)
+    for i, (finding, proposal) in enumerate(zip(targets, results, strict=True), start=1):
+        if isinstance(proposal, BaseException):
+            logger.warning("fix proposal failed: %s", proposal)
+            continue
         if proposal is None:
             continue
         if proposal.verified and can_open:

@@ -79,7 +79,9 @@ async def test_two_pass_flow_with_guardrails() -> None:
 
     scanner = AIScanner(_client(llm_transport(responder, calls)), agent_enabled=False)
     result = await scanner.scan(_input(graph, _db_change(graph)))
-    assert result.ai_used and result.model == "nemotron-test" and len(calls) == 2
+    # review + skeptic (run concurrently on the static candidates) + skeptic for the new AI one
+    assert result.ai_used and result.model == "nemotron-test" and len(calls) == 3
+    assert set(result.timings) >= {"one_shot_ms", "skeptic_ms", "ai_total_ms"}
     sec = {f.candidate_id: f for f in result.findings if f.candidate_id}
     assert set(sec) == {"S1", "A1"}  # duplicate merged, hallucinated file dropped
     assert sec["S1"].status is FindingStatus.VERIFIED
@@ -89,7 +91,7 @@ async def test_two_pass_flow_with_guardrails() -> None:
     assert result.craft_adjustment.docs == -10  # clamped
     ai_quality = [f for f in result.findings if f.rule_id == "AI-READABILITY"]
     assert ai_quality and ai_quality[0].start_line == graph.files["app/db.py"].line_count
-    assert '<untrusted kind="source">' in calls[0]["messages"][1]["content"]
+    assert all('<untrusted kind="source">' in c["messages"][1]["content"] for c in calls)
 
 
 async def test_prompt_injection_blocks_verifier_rejections() -> None:

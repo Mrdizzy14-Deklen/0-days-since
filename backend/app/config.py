@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # Nemotron agent: Pass 1 becomes a plan -> tool calls -> report loop over the code graph,
     # and confirmed vulnerabilities get an auto-fix that is re-scanned before a PR is opened.
     agent_enabled: bool = True
+    # Optional faster model for the agent's investigation turns (same endpoint as LLM_MODEL),
+    # e.g. nvidia/nemotron-3.5-lightning-30b-a3b. Empty = use LLM_MODEL everywhere.
+    llm_agent_model: str = ""
     agent_max_steps: int = Field(default=10, ge=2, le=30)
     agent_fix_enabled: bool = True
     # Opening fix PRs needs the App's Contents and Pull requests permissions set to write.

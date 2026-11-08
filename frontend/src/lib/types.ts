@@ -277,6 +277,8 @@ export interface AgentStep {
   action: string;
   args: Record<string, unknown>;
   observation: string;
+  /** How long the model took to choose this step (newer scans only). */
+  ms?: number;
 }
 
 export interface AgentInvestigation {
@@ -302,9 +304,20 @@ export interface AgentFix {
   error: string | null;
 }
 
+/** Wall-clock milliseconds per scan phase (newer scans only). */
+export interface ScanTimings {
+  agent_ms?: number;
+  one_shot_ms?: number;
+  skeptic_ms?: number;
+  ai_total_ms?: number;
+  fixes_ms?: number;
+  analysis_ms?: number;
+}
+
 export interface AgentTrace {
   investigation?: AgentInvestigation | null;
   fixes?: AgentFix[];
+  timings?: ScanTimings;
 }
 
 export interface DailyPoint {

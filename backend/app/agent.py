@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -77,10 +78,11 @@ class AgentStep:
     action: str
     args: dict[str, Any]
     observation: str
+    ms: int = 0  # how long the model took to choose this step
 
     def to_dict(self) -> dict[str, Any]:
         return {"step": self.step, "thought": self.thought[:600], "action": self.action,
-                "args": self.args, "observation": self.observation[:700]}
+                "args": self.args, "observation": self.observation[:700], "ms": self.ms}
 
 
 @dataclass(slots=True)
@@ -296,11 +298,13 @@ class SecurityAgent:
                                           {"role": "user", "content": brief}]
         for turn in range(1, self.max_steps + 1):
             remaining = self.max_steps - turn
+            t0 = time.perf_counter()
             try:
                 reply = await self.llm.complete_json_messages(messages)
             except LLMError as exc:
                 run.error = str(exc)
                 return run
+            ms = int((time.perf_counter() - t0) * 1000)
             run.model = run.model or reply.model
             data = reply.data
             if turn == 1 and isinstance(data.get("plan"), list):
@@ -312,7 +316,7 @@ class SecurityAgent:
             if action == "finish" or (not action and _report_from(data)):
                 run.report = _report_from(data)
                 run.finished = run.report is not None
-                run.steps.append(AgentStep(turn, thought, "finish", {}, "Report submitted."))
+                run.steps.append(AgentStep(turn, thought, "finish", {}, "Report submitted.", ms))
                 if run.finished:
                     return run
                 observation = "finish needs args.report following the schema. Try again."
@@ -320,7 +324,7 @@ class SecurityAgent:
                 observation = "Reply with one JSON object containing thought, action and args."
             else:
                 observation = tools.run(action, args)
-                run.steps.append(AgentStep(turn, thought, action, args, observation))
+                run.steps.append(AgentStep(turn, thought, action, args, observation, ms))
 
             nudge = ("You must call finish NOW with your report." if remaining <= 1
                      else f"{remaining} turns left.")

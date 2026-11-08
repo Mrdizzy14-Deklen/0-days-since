@@ -322,6 +322,7 @@ async def test_agent_opens_verified_fix_pr(db: None, gh: FakeGitHub,
         fix = push.agent_trace["fixes"][0]
         assert fix["verified"] and fix["pr_url"].endswith("/pull/1")
         assert push.agent_trace["investigation"]["finished"]
+        assert {"agent_ms", "fixes_ms", "analysis_ms"} <= set(push.agent_trace["timings"])
     text = next(iter(gh.check_runs.values()))["output"]["text"]
     assert "Agent fixes" in text and "PR #1" in text
     get_settings.cache_clear()

@@ -82,6 +82,16 @@ class LLMClient:
             timeout=s.llm_timeout_seconds, max_tokens=s.llm_max_tokens, transport=transport,
         )
 
+    def with_primary_model(self, model: str) -> LLMClient:
+        """Same endpoints and limits, but the first endpoint uses ``model`` (fallbacks unchanged).
+        Used to give the agent's many short investigation turns a faster model."""
+        if not model or not self.endpoints:
+            return self
+        first, *rest = self.endpoints
+        return LLMClient([LLMEndpoint(first.base_url, first.api_key, model), *rest],
+                         timeout=self.timeout, max_tokens=self.max_tokens,
+                         transport=self._transport)
+
     @property
     def available(self) -> bool:
         return bool(self.endpoints)

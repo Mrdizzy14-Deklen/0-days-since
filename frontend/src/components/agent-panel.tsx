@@ -17,7 +17,7 @@ import {
 import { CopyButton } from "@/components/copy-button";
 import { RichText } from "@/components/rich-text";
 import { modelLabel } from "@/lib/format";
-import type { AgentFix, AgentTrace } from "@/lib/types";
+import type { AgentFix, AgentTrace, ScanTimings } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const TOOL: Record<string, { label: string; icon: LucideIcon }> = {
@@ -117,10 +117,46 @@ function FixCard({ fix }: { fix: AgentFix }) {
   );
 }
 
+function secs(ms: number | undefined) {
+  return ms === undefined ? null : `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
+}
+
+/** Where the scan's time went: agent and skeptic run side by side, then fixes. */
+function Timings({ t }: { t: ScanTimings }) {
+  const rows = [
+    ["Agent investigation", t.agent_ms ?? t.one_shot_ms],
+    ["Skeptic (in parallel)", t.skeptic_ms],
+    ["Fixes + re-verification", t.fixes_ms],
+  ] as const;
+  const total = t.analysis_ms;
+  return (
+    <div className="card-surface p-4">
+      <div className="eyebrow mb-2">Time taken</div>
+      <dl className="space-y-1.5 text-sm">
+        {rows.map(([label, ms]) =>
+          ms === undefined ? null : (
+            <div key={label} className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="font-mono tabular-nums">{secs(ms)}</dd>
+            </div>
+          ),
+        )}
+        {total !== undefined && (
+          <div className="flex justify-between gap-3 border-t pt-1.5 font-medium">
+            <dt>Total analysis</dt>
+            <dd className="font-mono tabular-nums">{secs(total)}</dd>
+          </div>
+        )}
+      </dl>
+    </div>
+  );
+}
+
 /** What the Nemotron agent did on this push: its plan, each tool call, and verified fixes. */
 export function AgentPanel({ agent }: { agent: AgentTrace | undefined }) {
   const run = agent?.investigation;
   const fixes = agent?.fixes ?? [];
+  const timings = agent?.timings;
   if (!run && fixes.length === 0) {
     return (
       <div className="card-surface p-6 text-sm text-muted-foreground">
@@ -167,6 +203,7 @@ export function AgentPanel({ agent }: { agent: AgentTrace | undefined }) {
                 </ol>
               </div>
             )}
+            {timings && <Timings t={timings} />}
           </div>
 
           <ol className="relative space-y-3 before:absolute before:bottom-4 before:left-[15px] before:top-4 before:w-0.5 before:bg-border">
@@ -189,6 +226,11 @@ export function AgentPanel({ agent }: { agent: AgentTrace | undefined }) {
                       <span className="text-sm font-medium">{tool.label}</span>
                       {!finish && (
                         <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">{callLabel(s.action, s.args)}</code>
+                      )}
+                      {s.ms !== undefined && (
+                        <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground" title="Model time for this step">
+                          {secs(s.ms)}
+                        </span>
                       )}
                     </div>
                     {s.thought && <p className="mt-1 text-sm text-muted-foreground">{s.thought}</p>}
