@@ -67,6 +67,7 @@ set_kv "$BENV" API_TOKEN "$TOKEN"
 # GitHub sign-in uses the GitHub App's Client ID / secret, kept in backend/.env on your laptop.
 set_kv "$ENVF" AUTH_GITHUB_ID "$(get_kv "$BENV" GITHUB_CLIENT_ID)"
 set_kv "$ENVF" AUTH_GITHUB_SECRET "$(get_kv "$BENV" GITHUB_CLIENT_SECRET)"
+set_kv "$ENVF" AUTH_URL "https://$DOMAIN"
 set_kv "$ENVF" NEXT_PUBLIC_GITHUB_APP_SLUG "${GITHUB_APP_SLUG:-$(get_kv "$BENV" GITHUB_APP_SLUG)}"
 chown zeroday:zeroday "$ENVF" "$BENV" && chmod 600 "$ENVF" "$BENV"
 sudo -u zeroday -H bash -c "cd $APP/frontend && pnpm install --frozen-lockfile --silent && pnpm build"
