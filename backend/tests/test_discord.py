@@ -123,13 +123,13 @@ async def test_integration_api(db: None, gh: FakeGitHub, fake_discord: FakeDisco
     from app.main import app
 
     monkeypatch.setenv("API_TOKEN", "s2s")
-    monkeypatch.setenv("PUBLIC_TEAMS", "acme")
+    monkeypatch.setenv("PUBLIC_TEAMS", "api")
     get_settings.cache_clear()
     auth = {"Authorization": "Bearer s2s"}
     alice = {**auth, "X-GitHub-Login": "alice"}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url="http://api.test") as client:
-        base = "/api/teams/acme/integrations"
+        base = "/api/teams/api/integrations"
         state = (await client.get(base, headers=alice)).json()
         assert state["can_edit"] and not state["discord"]["connected"]
         # public read-only visitors may look but not change anything

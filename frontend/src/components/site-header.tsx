@@ -41,7 +41,7 @@ function TeamSwitcher({ team, teams }: { team: TeamRef; teams: TeamSummary[] }) 
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
-        <DropdownMenuLabel className="text-xs text-muted-foreground">Switch team</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Switch repository</DropdownMenuLabel>
         {teams.map((t) => (
           <DropdownMenuItem key={t.id} asChild>
             <Link href={`/teams/${t.slug}`} className="flex items-center justify-between">

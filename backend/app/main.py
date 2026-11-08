@@ -19,6 +19,7 @@ from app.api import router as api_router
 from app.config import get_settings
 from app.db import dispose_db, init_db
 from app.github_app import verify_webhook_signature
+from app.migrations import migrate
 from app.pipeline import (
     handle_installation_event,
     job_from_pull_request,
@@ -35,6 +36,7 @@ logger = logging.getLogger("zeroday")
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await init_db()
+    await migrate()
     if not settings.github_webhook_secret:
         logger.warning("GITHUB_WEBHOOK_SECRET is not set: all webhooks will be rejected")
     if not settings.llm_configured:

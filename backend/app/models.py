@@ -1,10 +1,11 @@
 """PostgreSQL / Tiger Data (TimescaleDB) data model for ZeroDay Score.
 
-Tenancy: every row hangs off a `Team` (one GitHub App installation == one team).
+Tenancy: every row hangs off a `Team` (one repository the GitHub App is installed on == one
+team).
 
 Tables
 ------
-- teams            : tenant + GitHub App installation
+- teams            : tenant (one installed repository) + its GitHub App installation
 - team_integrations: per-team notification settings (Discord webhook)
 - repositories     : connected repos and their baseline/scan state
 - repo_files       : latest known content of every analyzable .py file (lets us
@@ -78,7 +79,9 @@ def _tz() -> sa.DateTime:
 
 
 class Team(SQLModel, table=True):
-    """A tenant. Created on sign-up or automatically on `installation.created`."""
+    """A tenant: one GitHub repository the App is installed on (an installation that covers
+    several repositories yields one team per repository). Created on `installation` events or
+    the repository's first push."""
 
     __tablename__ = "teams"
 
@@ -86,9 +89,9 @@ class Team(SQLModel, table=True):
     name: str = Field(max_length=200)
     slug: str = Field(max_length=100, unique=True, index=True)
 
-    github_installation_id: int | None = Field(
-        default=None, sa_type=sa.BigInteger, unique=True, index=True
-    )
+    github_installation_id: int | None = Field(default=None, sa_type=sa.BigInteger, index=True)
+    github_repo_id: int | None = Field(default=None, sa_type=sa.BigInteger, unique=True,
+                                       index=True)
     github_account_login: str | None = Field(default=None, max_length=100)
     github_account_id: int | None = Field(default=None, sa_type=sa.BigInteger)
     github_account_type: str | None = Field(default=None, max_length=20)  # "User" | "Organization"

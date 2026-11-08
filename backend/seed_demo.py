@@ -172,6 +172,10 @@ async def seed(*, reset: bool = False, live_llm: bool = False, days_ago: int = 2
         "repositories": [{"id": REPO_ID, "name": REPO_NAME,
                           "full_name": REPO_PAYLOAD["full_name"], "private": True}],
     }, transport=github.transport)
+    async with session_scope() as s:  # keep the public demo URL (and PUBLIC_TEAMS) stable
+        team = (await s.exec(select(Team).where(Team.github_repo_id == REPO_ID))).one()
+        team.slug = REPO_OWNER
+        s.add(team)
 
     replay = ReplayLLM()
     if live_llm:

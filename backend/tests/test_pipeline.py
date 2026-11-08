@@ -132,38 +132,38 @@ async def test_end_to_end(db: None, gh: FakeGitHub) -> None:
 
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url="http://api.test") as client:
-        board = (await client.get("/api/teams/acme/leaderboard")).json()
+        board = (await client.get("/api/teams/api/leaderboard")).json()
         alice = board["developers"][0]
         assert alice["github_login"] == "alice" and alice["rank"] == 1
         assert alice["security_score"] == 455 and alice["fault_ratio"] == 0.5
         assert alice["top_cwe"] == "CWE-89"
 
-        feed = (await client.get("/api/teams/acme/pushes")).json()
+        feed = (await client.get("/api/teams/api/pushes")).json()
         assert [p["id"] for p in feed] == [fix_id, push_id]
         assert feed[1]["conclusion"] == "failure" and feed[1]["vulns"]["high"] == 1
 
         detail = (await client.get(f"/api/pushes/{push_id}")).json()
         assert detail["vulnerabilities"][0]["cwe"] == "CWE-89"
-        assert detail["team"]["slug"] == "acme"
+        assert detail["team"]["slug"] == "api"
         scope = {m["file_path"]: m for m in detail["incident_scope"]}
         assert scope["app/db.py"]["compromised"] and "sql" in scope["app/db.py"]["sinks"]
         assert "app/routes/users.py" in scope
         path = detail["blast_radius"]["taint_paths"][0]
         assert path["nodes"][0] == "app.routes.users:get_user" and path["args_flow"]
 
-        stats = (await client.get("/api/teams/acme/stats")).json()
+        stats = (await client.get("/api/teams/api/stats")).json()
         assert stats["total_pushes"] == 2 and stats["faulty_pushes"] == 1
         assert stats["blocked_merges"] == 1 and stats["top_cwes"][0]["cwe"] == "CWE-89"
 
-        trends = (await client.get("/api/teams/acme/trends")).json()
-        daily = (await client.get("/api/teams/acme/daily")).json()
+        trends = (await client.get("/api/teams/api/trends")).json()
+        daily = (await client.get("/api/teams/api/daily")).json()
         assert daily["source"] == "computed"  # SQLite: no continuous aggregate
         assert sum(d["pushes"] for d in daily["series"]) == 2
         assert sum(d["faulty_pushes"] for d in daily["series"]) == 1
         assert [p["security"] for p in trends["series"]["alice"]] == [210, 455]
 
         dev_detail = (await client.get(f"/api/developers/{alice['id']}")).json()
-        assert dev_detail["team"]["slug"] == "acme"
+        assert dev_detail["team"]["slug"] == "api"
         assert len(dev_detail["history"]) == 2 and len(dev_detail["recent_pushes"]) == 2
 
         assert (await client.get("/api/teams/nope/leaderboard")).status_code == 404
@@ -180,7 +180,7 @@ async def test_api_token_enforces_team_membership(db: None, gh: FakeGitHub,
     get_settings.cache_clear()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url="http://api.test") as client:
-        url = "/api/teams/acme/leaderboard"
+        url = "/api/teams/api/leaderboard"
         assert (await client.get(url)).status_code == 401
         auth = {"Authorization": "Bearer s2s-token"}
         assert (await client.get(url, headers={**auth, "X-GitHub-Login": "mallory"})
@@ -191,17 +191,17 @@ async def test_api_token_enforces_team_membership(db: None, gh: FakeGitHub,
         inst = {**auth, "X-GitHub-Login": "bob", "X-GitHub-Installations": "5,77"}
         assert (await client.get(url, headers=inst)).status_code == 200
         assert [t["slug"] for t in (await client.get("/api/teams", headers=inst)).json()] == \
-            ["acme"]
+            ["api"]
         # installations only count for a signed-in login
         anon_inst = {**auth, "X-GitHub-Installations": "77"}
         assert (await client.get(url, headers=anon_inst)).status_code == 404
 
         # PUBLIC_TEAMS: read-only for anyone, including signed-out visitors
-        monkeypatch.setenv("PUBLIC_TEAMS", "acme")
+        monkeypatch.setenv("PUBLIC_TEAMS", "api")
         get_settings.cache_clear()
         assert (await client.get(url, headers=auth)).status_code == 200
         teams = (await client.get("/api/teams", headers=auth)).json()
-        assert teams[0]["slug"] == "acme" and teams[0]["public"] is True
+        assert teams[0]["slug"] == "api" and teams[0]["public"] is True
 
 
 async def test_scan_error_reports_neutral_check(db: None, gh: FakeGitHub) -> None:

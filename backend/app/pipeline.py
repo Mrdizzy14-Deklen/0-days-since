@@ -201,17 +201,28 @@ def _slugify(value: str) -> str:
     return re.sub(r"[^a-z0-9-]+", "-", value.lower()).strip("-")[:80] or "team"
 
 
+async def unique_team_slug(session: AsyncSession, owner: str, name: str, repo_id: int) -> str:
+    """The repository name, else owner-name, else owner-name-<repo id>."""
+    for candidate in (_slugify(name), _slugify(f"{owner}-{name}")):
+        if not (await session.exec(select(Team.id).where(Team.slug == candidate))).first():
+            return candidate
+    return f"{_slugify(f'{owner}-{name}')[:80]}-{repo_id}"
+
+
 async def upsert_team(session: AsyncSession, installation_id: int,
-                      account: dict[str, Any]) -> Team:
-    team = (await session.exec(select(Team).where(
-        Team.github_installation_id == installation_id))).first()
+                      account: dict[str, Any], repo: dict[str, Any]) -> Team:
+    """The team for one installed repository (teams are per repository, not per account)."""
+    repo_id = int(repo["id"])
+    team = (await session.exec(select(Team).where(Team.github_repo_id == repo_id))).first()
     login = account.get("login") or f"installation-{installation_id}"
+    full_name = repo.get("full_name") or f"{login}/{repo.get('name') or repo_id}"
+    owner, _, name = full_name.partition("/")
     if team is None:
-        slug = _slugify(login)
-        if (await session.exec(select(Team).where(Team.slug == slug))).first():
-            slug = f"{slug}-{installation_id}"
-        team = Team(name=login, slug=slug, github_installation_id=installation_id)
+        team = Team(name=name, github_repo_id=repo_id,
+                    slug=await unique_team_slug(session, owner, name, repo_id))
         session.add(team)
+    team.name = name  # follows repository renames
+    team.github_installation_id = installation_id  # a reinstall gets a new installation id
     team.github_account_login = login
     team.github_account_id = account.get("id")
     team.github_account_type = account.get("type")
@@ -365,6 +376,16 @@ async def build_baseline(installation_id: int, repo_id: int, ref: str | None = N
 # --------------------------------------------------------------------------------------
 
 
+async def _deactivate_team(session: AsyncSession, team: Team) -> None:
+    """The App was uninstalled from (or suspended on) this team's repository."""
+    team.installation_suspended = True
+    session.add(team)
+    for r in (await session.exec(select(Repository).where(Repository.team_id == team.id))).all():
+        r.is_active = False
+        graph_cache.drop(r.id)
+        session.add(r)
+
+
 async def handle_installation_event(event: str, payload: dict[str, Any], *,
                                     transport: Any = None) -> list[int]:
     """installation / installation_repositories: sync team + repos, build baselines."""
@@ -374,29 +395,30 @@ async def handle_installation_event(event: str, payload: dict[str, Any], *,
     repo_ids: list[int] = []
     async with installation_lock(installation_id), session_scope() as session:
         if event == "installation" and action in {"deleted", "suspend"}:
-            team = (await session.exec(select(Team).where(
-                Team.github_installation_id == installation_id))).first()
-            if team is not None:
-                team.installation_suspended = True
-                repos = (await session.exec(select(Repository).where(
-                    Repository.team_id == team.id))).all()
-                for r in repos:
-                    r.is_active = False
-                    graph_cache.drop(r.id)
-                    session.add(r)
-                session.add(team)
+            teams = (await session.exec(select(Team).where(
+                Team.github_installation_id == installation_id))).all()
+            for team in teams:
+                await _deactivate_team(session, team)
             return []
-        team = await upsert_team(session, installation_id, installation.get("account") or {})
-        added = payload.get("repositories") or payload.get("repositories_added") or []
+        if event == "installation" and action == "unsuspend":
+            teams = (await session.exec(select(Team).where(
+                Team.github_installation_id == installation_id))).all()
+            for team in teams:
+                team.installation_suspended = False
+                session.add(team)
+                for r in (await session.exec(select(Repository).where(
+                        Repository.team_id == team.id))).all():
+                    r.is_active = True
+                    session.add(r)
+                    repo_ids.append(r.id)
+        account = installation.get("account") or {}
         for removed in payload.get("repositories_removed") or []:
-            row = (await session.exec(select(Repository).where(
-                Repository.team_id == team.id,
-                Repository.github_repo_id == int(removed["id"])))).first()
-            if row is not None:
-                row.is_active = False
-                graph_cache.drop(row.id)
-                session.add(row)
-        for r in added:
+            team = (await session.exec(select(Team).where(
+                Team.github_repo_id == int(removed["id"])))).first()
+            if team is not None:
+                await _deactivate_team(session, team)
+        for r in payload.get("repositories") or payload.get("repositories_added") or []:
+            team = await upsert_team(session, installation_id, account, r)
             row = await upsert_repository(session, team, {
                 **r, "owner": {"login": (r.get("full_name") or "/").split("/")[0]}})
             repo_ids.append(row.id)
@@ -419,7 +441,7 @@ async def run_scan(job: ScanJob, *, gh_transport: Any = None,
                 PushEvent.delivery_id == job.delivery_id))).first():
             return None  # webhook redelivery
         team = await upsert_team(session, job.installation_id,
-                                 job.repo.get("owner") or {})
+                                 job.repo.get("owner") or {}, job.repo)
         repo = await upsert_repository(session, team, job.repo)
         duplicate = (await session.exec(select(PushEvent.id).where(
             PushEvent.repository_id == repo.id, PushEvent.after_sha == job.after_sha,
