@@ -435,7 +435,6 @@ async def handle_installation_event(event: str, payload: dict[str, Any], *,
 async def run_scan(job: ScanJob, *, gh_transport: Any = None,
                    scanner: AIScanner | None = None) -> int | None:
     """Full scan of one push. Returns the PushEvent id (None if skipped)."""
-    settings = get_settings()
     async with installation_lock(job.installation_id), session_scope() as session:
         if job.delivery_id and (await session.exec(select(PushEvent.id).where(
                 PushEvent.delivery_id == job.delivery_id))).first():
@@ -459,17 +458,25 @@ async def run_scan(job: ScanJob, *, gh_transport: Any = None,
         session.add(push)
         await session.flush()
         push_id, repo_id, dev_id = push.id, repo.id, dev.id
+    return await _execute_scan(job, push_id, repo_id, dev_id, gh_transport=gh_transport,
+                               scanner=scanner)
 
+
+async def _execute_scan(job: ScanJob, push_id: int, repo_id: int, dev_id: int, *,
+                        gh_transport: Any = None, scanner: AIScanner | None = None,
+                        check_run_id: int | None = None) -> int:
+    """Scan an already-recorded push (new, or resumed after a restart with its check run)."""
+    settings = get_settings()
     async with GitHubApp(settings, transport=gh_transport) as gh:
         token: str | None = None
-        check_run_id: int | None = None
         details_url = f"{settings.frontend_origin.rstrip('/')}/pushes/{push_id}"
         owner, name = job.repo["full_name"].split("/", 1)
         try:
             token = await gh.installation_token(job.installation_id)
-            check_run_id = await gh.create_check_run(
-                token, owner, name, job.after_sha, name=CHECK_NAME, details_url=details_url,
-                external_id=str(push_id))
+            if check_run_id is None:
+                check_run_id = await gh.create_check_run(
+                    token, owner, name, job.after_sha, name=CHECK_NAME,
+                    details_url=details_url, external_id=str(push_id))
             async with session_scope() as session:
                 push = await session.get(PushEvent, push_id)
                 assert push is not None
@@ -501,6 +508,44 @@ async def run_scan(job: ScanJob, *, gh_transport: Any = None,
                 except GitHubError:
                     logger.exception("could not report scan failure to GitHub")
     return push_id
+
+
+async def resume_interrupted_scans(*, gh_transport: Any = None,
+                                   scanner: AIScanner | None = None) -> list[int]:
+    """Re-run scans that a restart cut off. Scans run inside this process, so at startup any
+    push still queued or in progress is an orphan: without this its page never finishes and
+    its GitHub check spins forever. Each one resumes in place, reusing its check run."""
+    async with session_scope() as session:
+        stuck = (await session.exec(select(PushEvent).where(
+            col(PushEvent.status).in_([ScanStatus.QUEUED, ScanStatus.IN_PROGRESS]))
+            .order_by(col(PushEvent.id)))).all()
+        jobs: list[tuple[ScanJob, PushEvent]] = []
+        for push in stuck:
+            repo = await session.get(Repository, push.repository_id)
+            team = await session.get(Team, push.team_id)
+            dev = await session.get(Developer, push.developer_id) if push.developer_id else None
+            if repo is None or team is None or team.github_installation_id is None:
+                push.status = ScanStatus.FAILED
+                push.error = "Interrupted by a server restart and could not be resumed."
+                push.completed_at = datetime.now(timezone.utc)
+                session.add(push)
+                continue
+            jobs.append((ScanJob(
+                installation_id=team.github_installation_id,
+                repo={"id": repo.github_repo_id, "name": repo.name, "full_name": repo.full_name,
+                      "owner": {"login": repo.owner}, "default_branch": repo.default_branch},
+                event_type=push.event_type, after_sha=push.after_sha,
+                before_sha=push.before_sha, ref=push.ref,
+                author_login=push.author_login or (dev.github_login if dev else "unknown"),
+                commit_message=push.commit_message or "", commit_url=push.commit_url,
+                pr_number=push.pr_number, delivery_id=push.delivery_id), push))
+        resumed = [(job, p.id, p.repository_id, p.developer_id, p.check_run_id)
+                   for job, p in jobs]
+    for job, push_id, repo_id, dev_id, check_run_id in resumed:
+        logger.info("resuming interrupted scan of push %s", push_id)
+        await _execute_scan(job, push_id, repo_id, dev_id, gh_transport=gh_transport,
+                            scanner=scanner, check_run_id=check_run_id)
+    return [r[1] for r in resumed]
 
 
 async def _scan_locked(gh: GitHubApp, token: str, job: ScanJob, push_id: int, repo_id: int,

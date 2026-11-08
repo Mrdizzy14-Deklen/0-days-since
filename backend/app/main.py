@@ -5,6 +5,7 @@ Run:  uvicorn app.main:app --reload --port 8000
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -24,6 +25,7 @@ from app.pipeline import (
     handle_installation_event,
     job_from_pull_request,
     job_from_push,
+    resume_interrupted_scans,
     run_scan,
 )
 
@@ -41,8 +43,19 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         logger.warning("GITHUB_WEBHOOK_SECRET is not set: all webhooks will be rejected")
     if not settings.llm_configured:
         logger.warning("No LLM API key configured: running deterministic-only scans")
+    # Scans cut off by the last restart (e.g. a deploy) finish in the background.
+    resume = asyncio.create_task(_resume_scans())
     yield
+    resume.cancel()
     await dispose_db()
+
+
+async def _resume_scans() -> None:
+    try:
+        if resumed := await resume_interrupted_scans():
+            logger.info("resumed %d interrupted scan(s): %s", len(resumed), resumed)
+    except Exception:
+        logger.exception("could not resume interrupted scans")
 
 
 app = FastAPI(title="0 Days Since API", version="0.2.0", lifespan=lifespan)

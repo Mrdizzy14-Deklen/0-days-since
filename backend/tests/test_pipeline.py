@@ -341,3 +341,33 @@ def test_bot_pushes_and_fix_branches_are_not_scored() -> None:
             "author": {"username": "dependabot[bot]", "name": "dependabot"}}
     assert job_from_push(payload(head_commit=head), "d") is None
     assert job_from_push(payload(ref="refs/heads/zeroday/fix-abc1234-1"), "d") is None
+
+
+async def test_scans_cut_off_by_a_restart_are_resumed(db: None, gh: FakeGitHub) -> None:
+    from app.pipeline import resume_interrupted_scans
+
+    # a real scan creates team/repo/developer; then simulate a push whose scan was killed
+    await run_scan(job_from_push(push_payload(SHA_A, SHA_A, "seed"), "d-0"),
+                   gh_transport=gh.transport, scanner=_deterministic())
+    async with session_scope() as s:
+        seed = (await s.exec(select(PushEvent))).one()
+        stuck = PushEvent(team_id=seed.team_id, repository_id=seed.repository_id,
+                          developer_id=seed.developer_id, delivery_id="d-1",
+                          event_type=seed.event_type, ref="refs/heads/main", before_sha=SHA_A,
+                          after_sha=SHA_B, commit_message="Add user lookup",
+                          author_login="alice", status=ScanStatus.IN_PROGRESS)
+        s.add(stuck)
+        await s.flush()
+        stuck_id = stuck.id
+
+    assert await resume_interrupted_scans(gh_transport=gh.transport,
+                                          scanner=_deterministic()) == [stuck_id]
+    async with session_scope() as s:
+        push = await s.get(PushEvent, stuck_id)
+        assert push.status is ScanStatus.COMPLETED and push.conclusion is CheckConclusion.FAILURE
+        assert push.check_run_id is not None and push.quality_metrics
+    run = gh.check_runs[max(gh.check_runs)]
+    assert run["head_sha"] == SHA_B and run["status"] == "completed"
+    # nothing left to resume
+    assert await resume_interrupted_scans(gh_transport=gh.transport,
+                                          scanner=_deterministic()) == []

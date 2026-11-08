@@ -32,7 +32,9 @@ function Fact({ label, value, ok }: { label: string; value: React.ReactNode; ok:
   );
 }
 
-export function QualityPanel({ push, metrics }: { push: Push; metrics: QualityMetrics | null }) {
+export function QualityPanel({ push, metrics: raw }: { push: Push; metrics: QualityMetrics | null }) {
+  // A push whose scan hasn't finished (or failed) has `{}` here, not null: only use real metrics.
+  const metrics = raw && typeof raw.avg_complexity === "number" ? raw : null;
   if (!metrics && push.craft_push_score === null) {
     return (
       <div className="card-surface p-6 text-center text-sm text-muted-foreground">
