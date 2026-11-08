@@ -12,7 +12,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Typed runtime configuration. Every value can be overridden via env vars."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # .env.local (server-only, never synced) overrides .env; deploy/brev uses it to switch the
+    # model endpoint without a redeploy.
+    model_config = SettingsConfigDict(env_file=(".env", ".env.local"), env_file_encoding="utf-8",
+                                      extra="ignore")
 
     # Database
     database_url: str = "postgresql+asyncpg://zeroday:zeroday@localhost:5432/zeroday"
