@@ -326,3 +326,18 @@ async def test_agent_opens_verified_fix_pr(db: None, gh: FakeGitHub,
     text = next(iter(gh.check_runs.values()))["output"]["text"]
     assert "Agent fixes" in text and "PR #1" in text
     get_settings.cache_clear()
+
+
+def test_bot_pushes_and_fix_branches_are_not_scored() -> None:
+    def payload(**over: Any) -> dict[str, Any]:
+        p = push_payload(SHA_A, SHA_B, "x")
+        p.update(over)
+        return p
+
+    assert job_from_push(payload(), "d") is not None
+    app_bot = {"login": "0-days-since[bot]", "id": 9, "type": "Bot"}
+    assert job_from_push(payload(sender=app_bot), "d") is None
+    head = {**push_payload(SHA_A, SHA_B, "x")["head_commit"],
+            "author": {"username": "dependabot[bot]", "name": "dependabot"}}
+    assert job_from_push(payload(head_commit=head), "d") is None
+    assert job_from_push(payload(ref="refs/heads/zeroday/fix-abc1234-1"), "d") is None

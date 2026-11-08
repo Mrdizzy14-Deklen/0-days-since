@@ -240,7 +240,9 @@ async def list_teams(session: SessionDep, principal: PrincipalDep) -> list[dict[
 async def leaderboard(slug: str, session: SessionDep, principal: PrincipalDep
                       ) -> dict[str, Any]:
     team = await _team_for(session, slug, principal)
-    devs = (await session.exec(select(Developer).where(Developer.team_id == team.id).order_by(
+    # Bots (e.g. this app's own fix commits scanned before bots were skipped) are not ranked.
+    devs = (await session.exec(select(Developer).where(
+        Developer.team_id == team.id, col(Developer.github_login).not_like("%[bot]")).order_by(
         col(Developer.composite_score).desc(), col(Developer.clean_streak).desc(),
         Developer.github_login))).all()
     return {"team": team_ref(team),

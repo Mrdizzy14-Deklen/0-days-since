@@ -113,6 +113,14 @@ class ScanJob:
     delivery_id: str | None = None
 
 
+FIX_BRANCH_PREFIX = "zeroday/fix-"
+
+
+def is_bot(login: str | None, account_type: str | None = None) -> bool:
+    """GitHub Apps and bots (this app's own fix commits, Dependabot, ...) are never scored."""
+    return account_type == "Bot" or (login or "").lower().endswith("[bot]")
+
+
 def job_from_push(payload: dict[str, Any], delivery_id: str | None) -> ScanJob | None:
     """Build a job from a `push` payload, or None if there is nothing to scan."""
     after = payload.get("after") or ""
@@ -126,6 +134,9 @@ def job_from_push(payload: dict[str, Any], delivery_id: str | None) -> ScanJob |
     sender = payload.get("sender") or {}
     author = head.get("author") or {}
     login = author.get("username") or sender.get("login") or "unknown"
+    if payload["ref"].startswith(f"refs/heads/{FIX_BRANCH_PREFIX}") or is_bot(login) or \
+            is_bot(sender.get("login"), sender.get("type")):
+        return None  # the agent's own fix branches and bot pushes are not people's scores
     same_as_sender = login == sender.get("login")
     before = payload.get("before")
     return ScanJob(
@@ -151,6 +162,8 @@ def job_from_pull_request(payload: dict[str, Any], delivery_id: str | None) -> S
     if head_repo.get("id") == base_repo.get("id"):
         return None
     user = pr.get("user") or {}
+    if is_bot(user.get("login"), user.get("type")):
+        return None
     return ScanJob(
         installation_id=int(payload["installation"]["id"]), repo=payload["repository"],
         event_type=EventType.PULL_REQUEST, after_sha=pr["head"]["sha"],
@@ -660,7 +673,7 @@ async def run_fixes(gh: GitHubApp, token: str, owner: str, name: str, job: ScanJ
             try:
                 proposal.pr_number, proposal.pr_url = await gh.open_pull_request_with_files(
                     token, owner, name, base_branch=branch, base_sha=job.after_sha,
-                    branch=f"zeroday/fix-{job.after_sha[:7]}-{i}",
+                    branch=f"{FIX_BRANCH_PREFIX}{job.after_sha[:7]}-{i}",
                     files=proposal.new_sources,
                     commit_message=proposal.commit_message,
                     title=f"🛡️ {proposal.commit_message}",
