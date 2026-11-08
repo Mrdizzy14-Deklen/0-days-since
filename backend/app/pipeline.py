@@ -49,7 +49,7 @@ from app.scoring import PushScore, apply_push, craft_subscores
 
 logger = logging.getLogger(__name__)
 
-CHECK_NAME = "ZeroDay Score"
+CHECK_NAME = "0 Days Since"
 
 
 # --------------------------------------------------------------------------------------
@@ -442,7 +442,7 @@ async def run_scan(job: ScanJob, *, gh_transport: Any = None,
                 try:
                     await gh.complete_check_run(
                         token, owner, name, check_run_id, conclusion="neutral",
-                        title="ZeroDay Score could not complete the scan",
+                        title="0 Days Since could not complete the scan",
                         summary=f"The scanner hit an internal error and did not score this "
                                 f"push.\n\n`{type(exc).__name__}`", details_url=details_url)
                 except GitHubError:

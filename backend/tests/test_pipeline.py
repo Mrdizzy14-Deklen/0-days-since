@@ -182,6 +182,21 @@ async def test_api_token_enforces_team_membership(db: None, gh: FakeGitHub,
                 ).status_code == 404
         assert (await client.get(url, headers={**auth, "X-GitHub-Login": "alice"})
                 ).status_code == 200
+        # a teammate who never pushed sees the team through the GitHub App installation
+        inst = {**auth, "X-GitHub-Login": "bob", "X-GitHub-Installations": "5,77"}
+        assert (await client.get(url, headers=inst)).status_code == 200
+        assert [t["slug"] for t in (await client.get("/api/teams", headers=inst)).json()] == \
+            ["acme"]
+        # installations only count for a signed-in login
+        anon_inst = {**auth, "X-GitHub-Installations": "77"}
+        assert (await client.get(url, headers=anon_inst)).status_code == 404
+
+        # PUBLIC_TEAMS: read-only for anyone, including signed-out visitors
+        monkeypatch.setenv("PUBLIC_TEAMS", "acme")
+        get_settings.cache_clear()
+        assert (await client.get(url, headers=auth)).status_code == 200
+        teams = (await client.get("/api/teams", headers=auth)).json()
+        assert teams[0]["slug"] == "acme" and teams[0]["public"] is True
 
 
 async def test_scan_error_reports_neutral_check(db: None, gh: FakeGitHub) -> None:

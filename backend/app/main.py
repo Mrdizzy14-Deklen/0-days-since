@@ -43,7 +43,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await dispose_db()
 
 
-app = FastAPI(title="ZeroDay Score API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="0 Days Since API", version="0.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_origin],

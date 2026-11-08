@@ -1,9 +1,12 @@
 """Dashboard REST + SSE API consumed by the Next.js frontend.
 
 Auth model: the Next.js server authenticates users with GitHub OAuth, then calls this API
-server-to-server with ``Authorization: Bearer <API_TOKEN>`` and ``X-GitHub-Login: <login>``.
-Team-scoped routes require that login to be a member (a Developer row) of the team. When
-``API_TOKEN`` is unset (local development) the API is open.
+server-to-server with ``Authorization: Bearer <API_TOKEN>``, ``X-GitHub-Login: <login>`` and
+``X-GitHub-Installations: <id,id>`` (the GitHub App installations that user can access, looked
+up by the Next.js server with the user's own OAuth token). A team is visible when the user can
+access its installation, has pushed to it (a Developer row), or the team is listed in
+``PUBLIC_TEAMS`` (read-only demo, also for signed-out visitors). When ``API_TOKEN`` is unset
+(local development) the API is open.
 """
 
 from __future__ import annotations
@@ -38,21 +41,28 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 @dataclass(slots=True)
 class Principal:
-    login: str | None
+    login: str | None  # None = signed-out visitor (public teams only)
     open_mode: bool
+    installations: frozenset[int] = frozenset()
+
+
+def _parse_installations(raw: str | None) -> frozenset[int]:
+    return frozenset(int(p) for p in (raw or "").split(",")[:200] if p.strip().isdigit())
 
 
 async def get_principal(authorization: Annotated[str | None, Header()] = None,
-                        x_github_login: Annotated[str | None, Header()] = None) -> Principal:
+                        x_github_login: Annotated[str | None, Header()] = None,
+                        x_github_installations: Annotated[str | None, Header()] = None,
+                        ) -> Principal:
     token = get_settings().api_token
+    installations = _parse_installations(x_github_installations)
     if not token:
-        return Principal(login=x_github_login, open_mode=True)
+        return Principal(login=x_github_login, open_mode=True, installations=installations)
     supplied = (authorization or "").removeprefix("Bearer ").strip()
     if not supplied or not hmac.compare_digest(supplied, token):
         raise HTTPException(status_code=401, detail="invalid API token")
-    if not x_github_login:
-        raise HTTPException(status_code=401, detail="missing X-GitHub-Login")
-    return Principal(login=x_github_login, open_mode=False)
+    return Principal(login=x_github_login or None, open_mode=False,
+                     installations=installations if x_github_login else frozenset())
 
 
 PrincipalDep = Annotated[Principal, Depends(get_principal)]
@@ -62,16 +72,28 @@ async def _team_for(session: AsyncSession, slug: str, principal: Principal) -> T
     team = (await session.exec(select(Team).where(Team.slug == slug))).first()
     if team is None:
         raise HTTPException(status_code=404, detail="team not found")
-    await _require_member(session, team.id, principal)
+    await _require_member(session, team, principal)
     return team
 
 
-async def _require_member(session: AsyncSession, team_id: int, principal: Principal) -> None:
-    if principal.open_mode:
-        return
+async def _can_view(session: AsyncSession, team: Team, principal: Principal) -> bool:
+    if principal.open_mode or team.slug in get_settings().public_team_slugs:
+        return True
+    if principal.login is None:
+        return False
+    if team.github_installation_id is not None and \
+            team.github_installation_id in principal.installations:
+        return True
     member = (await session.exec(select(Developer.id).where(
-        Developer.team_id == team_id, Developer.github_login == principal.login))).first()
-    if member is None:
+        Developer.team_id == team.id, Developer.github_login == principal.login))).first()
+    return member is not None
+
+
+async def _require_member(session: AsyncSession, team: Team | int | None,
+                          principal: Principal) -> None:
+    if isinstance(team, int):
+        team = await session.get(Team, team)
+    if team is None or not await _can_view(session, team, principal):
         raise HTTPException(status_code=404, detail="team not found")  # do not leak existence
 
 
@@ -174,13 +196,17 @@ async def _push_rows(session: AsyncSession, team_id: int, *, limit: int,
 
 @router.get("/teams")
 async def list_teams(session: SessionDep, principal: PrincipalDep) -> list[dict[str, Any]]:
-    stmt = select(Team).order_by(Team.name)
+    public = get_settings().public_team_slugs
+    teams = (await session.exec(select(Team).order_by(Team.name))).all()
     if not principal.open_mode or principal.login:
-        stmt = stmt.join(Developer, col(Developer.team_id) == col(Team.id)).where(
-            Developer.github_login == principal.login)
-    teams = (await session.exec(stmt)).all()
+        member_ids = set((await session.exec(select(Developer.team_id).where(
+            Developer.github_login == principal.login))).all()) if principal.login else set()
+        teams = [t for t in teams if t.slug in public or t.id in member_ids
+                 or (principal.login is not None
+                     and t.github_installation_id in principal.installations)]
     return [{"id": t.id, "slug": t.slug, "name": t.name, "account": t.github_account_login,
-             "installed": t.github_installation_id is not None and not t.installation_suspended}
+             "installed": t.github_installation_id is not None and not t.installation_suspended,
+             "public": t.slug in public}
             for t in teams]
 
 

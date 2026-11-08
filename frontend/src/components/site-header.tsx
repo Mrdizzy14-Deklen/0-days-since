@@ -3,6 +3,7 @@ import { Check, ChevronsUpDown, LogOut } from "lucide-react";
 
 import { signOut } from "@/auth";
 import { DevAvatar } from "@/components/dev-avatar";
+import { GithubMark } from "@/components/icons";
 import { LogoMark, Wordmark } from "@/components/logo";
 import { ScoringGuide } from "@/components/scoring-guide";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -121,6 +122,13 @@ export async function SiteHeader({ team, section = null }: { team?: TeamRef | nu
           )}
           <ScoringGuide />
           <ThemeToggle />
+          {!viewer.demoMode && !viewer.signedIn && (
+            <Button asChild size="sm" className="ml-1">
+              <Link href="/signin">
+                <GithubMark className="size-4" /> Sign in
+              </Link>
+            </Button>
+          )}
           {viewer.signedIn && viewer.login && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

@@ -1,4 +1,4 @@
-/** Response shapes of the ZeroDay Score FastAPI backend (`backend/app/api.py`). */
+/** Response shapes of the 0 Days Since FastAPI backend (`backend/app/api.py`). */
 
 export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
 export type Conclusion = "success" | "neutral" | "failure" | "cancelled" | "skipped";
@@ -14,6 +14,8 @@ export interface TeamRef {
 export interface TeamSummary extends TeamRef {
   account: string | null;
   installed: boolean;
+  /** Listed in the backend's PUBLIC_TEAMS (the read-only demo). */
+  public?: boolean;
 }
 
 export interface Developer {

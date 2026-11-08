@@ -171,7 +171,7 @@ class GitHubApp:
             "name": name, "head_sha": head_sha, "status": "in_progress",
             "started_at": _iso_now(),
             "output": {"title": "Scanning push…",
-                       "summary": "ZeroDay Score is building the cross-file call graph and "
+                       "summary": "0 Days Since is building the cross-file call graph and "
                                   "running the AI vulnerability analysis."},
         }
         if details_url:

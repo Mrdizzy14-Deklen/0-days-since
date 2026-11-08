@@ -1,8 +1,6 @@
 import { NextRequest } from "next/server";
 
-import { authEnabled } from "@/auth";
 import { backendFetch } from "@/lib/backend";
-import { getViewer } from "@/lib/viewer";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,7 +14,8 @@ const ALLOWED = [
 
 /**
  * GET proxy from the browser to the FastAPI backend. Adds the server-held API token and the
- * signed-in user's GitHub login (membership is enforced by the backend), and streams the
+ * signed-in user's GitHub login and installations (visibility is enforced by the backend:
+ * signed-out visitors only reach PUBLIC_TEAMS), and streams the
  * response so the SSE live feed passes straight through.
  */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
@@ -24,9 +23,6 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ path: strin
   const target = path.join("/");
   if (!ALLOWED.some((re) => re.test(target))) {
     return Response.json({ detail: "not found" }, { status: 404 });
-  }
-  if (authEnabled && !(await getViewer()).signedIn) {
-    return Response.json({ detail: "sign in required" }, { status: 401 });
   }
 
   const params = new URLSearchParams(req.nextUrl.searchParams);

@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     # Shared secret the Next.js server sends as `Authorization: Bearer <token>` to the dashboard
     # API. Empty = open API (local development only).
     api_token: str = ""
+    # Comma-separated team slugs anyone may view read-only, signed in or not (the demo team).
+    public_teams: str = ""
+
+    @property
+    def public_team_slugs(self) -> frozenset[str]:
+        return frozenset(t.strip() for t in self.public_teams.split(",") if t.strip())
 
     @property
     def llm_configured(self) -> bool:

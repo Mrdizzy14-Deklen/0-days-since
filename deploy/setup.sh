@@ -47,20 +47,28 @@ sudo -u zeroday -H bash -c "cd $APP/backend && { [ -x .venv/bin/python ] || uv v
 
 echo "==> Dashboard"
 ENVF="$APP/frontend/.env.production.local"
+BENV="$APP/backend/.env"
+# set_kv FILE KEY VALUE: replace or append KEY=VALUE (values here never contain '|').
+set_kv() { if grep -q "^$2=" "$1"; then sed -i "s|^$2=.*|$2=$3|" "$1"; else echo "$2=$3" >> "$1"; fi; }
+get_kv() { grep -E "^$2=" "$1" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
 if [ ! -f "$ENVF" ]; then
   cat > "$ENVF" <<ENV
 ZERODAY_API_URL=http://127.0.0.1:8000
-ZERODAY_API_TOKEN=
-AUTH_SECRET=$(openssl rand -base64 32)
+AUTH_SECRET=$(openssl rand -base64 32 | tr -d '|')
 AUTH_TRUST_HOST=true
-# Optional GitHub sign-in (leave empty for open demo mode):
-AUTH_GITHUB_ID=
-AUTH_GITHUB_SECRET=
-# Shown on the "Install the GitHub App" button (needs a rebuild to change):
-NEXT_PUBLIC_GITHUB_APP_SLUG=${GITHUB_APP_SLUG:-}
 ENV
-  chown zeroday:zeroday "$ENVF" && chmod 600 "$ENVF"
 fi
+# Shared server-to-server token: generated once, kept in the dashboard env (not rsynced) and
+# copied into backend/.env on every deploy so the dashboard API is never open in production.
+TOKEN=$(get_kv "$ENVF" ZERODAY_API_TOKEN)
+[ -n "$TOKEN" ] || TOKEN=$(openssl rand -hex 32)
+set_kv "$ENVF" ZERODAY_API_TOKEN "$TOKEN"
+set_kv "$BENV" API_TOKEN "$TOKEN"
+# GitHub sign-in uses the GitHub App's Client ID / secret, kept in backend/.env on your laptop.
+set_kv "$ENVF" AUTH_GITHUB_ID "$(get_kv "$BENV" GITHUB_CLIENT_ID)"
+set_kv "$ENVF" AUTH_GITHUB_SECRET "$(get_kv "$BENV" GITHUB_CLIENT_SECRET)"
+set_kv "$ENVF" NEXT_PUBLIC_GITHUB_APP_SLUG "${GITHUB_APP_SLUG:-$(get_kv "$BENV" GITHUB_APP_SLUG)}"
+chown zeroday:zeroday "$ENVF" "$BENV" && chmod 600 "$ENVF" "$BENV"
 sudo -u zeroday -H bash -c "cd $APP/frontend && pnpm install --frozen-lockfile --silent && pnpm build"
 
 echo "==> Services + HTTPS"

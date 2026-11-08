@@ -39,6 +39,8 @@ Check: `https://zero-days-since.work/play` and `https://api.zero-days-since.work
 | Setting | Value |
 |---|---|
 | Homepage URL | `https://zero-days-since.work` |
+| Callback URL (sign-in) | `https://zero-days-since.work/api/auth/callback/github` |
+| Setup URL (optional) | `https://zero-days-since.work/` and tick "Redirect on update" |
 | Webhook URL | `https://api.zero-days-since.work/api/webhooks/github` |
 | Webhook secret | `openssl rand -hex 32` |
 | Permissions | Checks, Contents, Pull requests: Read & write · Metadata: Read |
@@ -52,10 +54,29 @@ GITHUB_APP_SLUG=...
 GITHUB_APP_PRIVATE_KEY_PATH=certs/github-app.pem
 GITHUB_WEBHOOK_SECRET=...
 AGENT_OPEN_FIX_PRS=true
+# Sign in with GitHub: the App's "Client ID" and a "Client secret" you generate (General tab)
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+# The demo team stays viewable by anyone, signed in or not
+PUBLIC_TEAMS=acme-fintech
 ```
 
 and redeploy with `GITHUB_APP_SLUG=<slug> deploy/push.sh <server-ip>` (the slug is baked into
 the dashboard's "Install" button at build time).
+
+Signing in uses the GitHub App itself, so people see exactly the teams whose installation
+GitHub says they can access (plus any team they have pushed to). `setup.sh` also generates the
+shared API token between the dashboard and the backend, so the API is never open in production.
+
+## 5. Block faulty commits from reaching main
+
+GitHub never lets an app reject a `git push`; checks run on commits that already exist. To
+stop a failing commit from landing, make the check required on your default branch:
+
+Repo > **Settings > Rules > Rulesets > New branch ruleset**: target the default branch, enable
+**Require a pull request before merging** and **Require status checks to pass**, and add the
+**0 Days Since** check (it appears in the picker once it has run on the repo). A blocked push
+(conclusion `failure`) can then not be merged; warnings (`neutral`) still can.
 
 ## Operating
 

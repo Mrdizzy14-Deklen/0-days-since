@@ -33,6 +33,7 @@ os.environ.update({
     "LLM_API_KEY": "",
     "LLM_FALLBACK_API_KEY": "",
     "API_TOKEN": "",
+    "PUBLIC_TEAMS": "",
     "FRONTEND_ORIGIN": "http://dash.test",
     "ENABLE_TIMESCALE": "false",
     "DATABASE_SSL": "false",
