@@ -21,7 +21,7 @@ import type { Push, TeamRef, TeamSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { getViewer } from "@/lib/viewer";
 
-export type Section = "overview" | "pushes" | "data" | null;
+export type Section = "overview" | "pushes" | "data" | "play" | null;
 
 function TeamSwitcher({ team, teams }: { team: TeamRef; teams: TeamSummary[] }) {
   if (teams.length <= 1) {
@@ -107,6 +107,9 @@ export async function SiteHeader({ team, section = null }: { team?: TeamRef | nu
               <NavLink href={`/teams/${team.slug}/data`} active={section === "data"}>
                 Data
               </NavLink>
+              <NavLink href={`/teams/${team.slug}/play`} active={section === "play"}>
+                Play
+              </NavLink>
             </nav>
           </>
         )}
@@ -158,6 +161,9 @@ export async function SiteHeader({ team, section = null }: { team?: TeamRef | nu
           </NavLink>
           <NavLink href={`/teams/${team.slug}/data`} active={section === "data"}>
             Data
+          </NavLink>
+          <NavLink href={`/teams/${team.slug}/play`} active={section === "play"}>
+            Play
           </NavLink>
         </nav>
       )}

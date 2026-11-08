@@ -5,12 +5,14 @@ import { ArrowLeft, Award, Bug, Flame, Lightbulb, ShieldCheck, Sparkles, Target 
 
 import { DevAvatar } from "@/components/dev-avatar";
 import { FlipNumber } from "@/components/flip-number";
+import { PersonalShareButton } from "@/components/share-button";
 import { HistoryChart } from "@/components/history-chart";
 import { PushRow } from "@/components/push-row";
 import { RelativeTime } from "@/components/relative-time";
 import { ScoreBar } from "@/components/score-bar";
 import { PageShell, SectionHeader, SiteHeader } from "@/components/site-header";
 import { getJson } from "@/lib/backend";
+import { toSharePush } from "@/lib/share";
 import {
   CRAFT_COLOR,
   CRAFT_WARN_THRESHOLD,
@@ -110,6 +112,14 @@ export default async function DeveloperPage({ params }: Params) {
                   </>
                 )}
               </p>
+              <div className="mt-3">
+                <PersonalShareButton
+                  developer={d}
+                  rank={ranked?.rank ?? null}
+                  teamSize={teamSize}
+                  pushes={data.recent_pushes.map(toSharePush)}
+                />
+              </div>
               {badges.length > 0 && (
                 <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Achievements">
                   {badges.map((b) => (
