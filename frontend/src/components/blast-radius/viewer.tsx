@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 
+import { RichText } from "@/components/rich-text";
 import { SeverityBadge } from "@/components/status";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { baseName, seriesColor, shortSymbol, sinkLabel } from "@/lib/format";
@@ -33,8 +34,8 @@ import {
 
 const ROLE_LABEL: Record<string, string> = {
   seed: "Changed",
-  upstream: "Caller",
-  downstream: "Callee",
+  upstream: "Calls in",
+  downstream: "Called",
 };
 
 function EntryBadge({ node }: { node: GraphNode }) {
@@ -111,7 +112,7 @@ function NodeCard({
       <div className="flex min-h-5 flex-wrap items-center gap-1 overflow-hidden">
         {node.role === "seed" && (
           <span className="inline-flex h-5 items-center gap-1 rounded bg-muted px-1.5 text-[10px] font-medium">
-            <GitCommitHorizontal className="size-3" aria-hidden /> modified
+            <GitCommitHorizontal className="size-3" aria-hidden /> changed
           </span>
         )}
         {node.is_entry_point && <EntryBadge node={node} />}
@@ -139,7 +140,7 @@ function FlowTrace({ flow, byId }: { flow: Flow; byId: Map<string, GraphNode> })
         snippet: "",
       };
     });
-  const roleTitle = { source: "Entry", propagator: "Through", sink: "Sink" } as const;
+  const roleTitle = { source: "Entry point (user input)", propagator: "Passes through", sink: "Dangerous call" } as const;
   return (
     <ol className="flex flex-col gap-2 md:flex-row md:items-stretch">
       {steps.map((s, i) => {
@@ -211,17 +212,17 @@ function IncidentScope({
   onFocus: (f: string | null) => void;
 }) {
   const compromised = scope.filter((m) => m.compromised).length;
-  const roleWord: Record<string, string> = { seed: "changed", upstream: "calls in", downstream: "called" };
+  const roleWord: Record<string, string> = { seed: "changed", upstream: "calls the change", downstream: "called by the change" };
   return (
-    <aside className="rounded-xl border bg-card" aria-labelledby="scope-title">
+    <aside className="card-surface self-start overflow-hidden" aria-labelledby="scope-title">
       <header className="border-b px-4 py-3">
         <h3 id="scope-title" className="font-semibold">
-          Incident scope
+          Affected files
         </h3>
         <p className="text-xs text-muted-foreground">
           {compromised > 0
-            ? `${compromised} of ${scope.length} modules on a verified attack path`
-            : `${scope.length} modules in the blast radius, none compromised`}
+            ? `${compromised} of ${scope.length} files sit on a confirmed attack path`
+            : `${scope.length} files are reachable from this change; none are compromised`}
         </p>
       </header>
       <ul className="divide-y">
@@ -247,11 +248,11 @@ function IncidentScope({
                   <span className="min-w-0 flex-1 truncate font-mono text-xs">{m.file_path}</span>
                   {m.compromised ? (
                     <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium">
-                      <ShieldAlert className="size-3.5 text-critical" aria-hidden /> Compromised
+                      <ShieldAlert className="size-3.5 text-critical" aria-hidden /> On attack path
                     </span>
                   ) : (
                     <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
-                      <ShieldCheck className="size-3.5" aria-hidden /> In radius
+                      <ShieldCheck className="size-3.5" aria-hidden /> Reachable
                     </span>
                   )}
                 </div>
@@ -273,7 +274,7 @@ function IncidentScope({
       {dependents.length > 0 && (
         <div className="border-t px-4 py-3">
           <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium">
-            <Import className="size-3.5" aria-hidden /> Modules importing the changed code
+            <Import className="size-3.5" aria-hidden /> Other modules that import this code
           </div>
           <div className="flex flex-wrap gap-1">
             {dependents.map((d) => (
@@ -349,8 +350,8 @@ export function BlastRadiusViewer({
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
       <div className="min-w-0 space-y-4">
         {flows.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Taint flows">
-            <span className="text-xs text-muted-foreground">Flows</span>
+          <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Attack paths">
+            <span className="text-xs font-medium text-muted-foreground">Attack paths</span>
             {flows.map((f) => (
               <button
                 key={f.id}
@@ -364,24 +365,24 @@ export function BlastRadiusViewer({
                 )}
               >
                 {f.severity && <SeverityBadge severity={f.severity} className="h-4 text-[9px]" />}
-                <span className="truncate">{f.label}</span>
+                <span className="truncate"><RichText text={f.label} /></span>
                 {f.crossFile && (
                   <span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">
                     cross-file
                   </span>
                 )}
                 {!f.status && !f.tainted && (
-                  <span className="shrink-0 text-[10px] text-muted-foreground">args don&apos;t reach sink</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">input doesn&apos;t reach it</span>
                 )}
                 {f.status === "rejected" && (
-                  <span className="shrink-0 text-[10px] text-muted-foreground">rejected</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">dismissed</span>
                 )}
               </button>
             ))}
           </div>
         )}
 
-        <div className="relative overflow-x-auto rounded-xl border bg-[color-mix(in_oklab,var(--muted)_35%,var(--card))]">
+        <div className="relative overflow-x-auto rounded-xl border bg-[color-mix(in_oklab,var(--muted)_40%,var(--card))] [background-image:radial-gradient(var(--border)_1px,transparent_1px)] [background-size:16px_16px]">
           <div className="relative" style={{ width: layout.width, height: layout.height }}>
             <svg
               width={layout.width}
@@ -438,18 +439,18 @@ export function BlastRadiusViewer({
           </span>
           <span className="inline-flex items-center gap-1.5">
             <svg width="22" height="6" aria-hidden><line x1="0" y1="3" x2="22" y2="3" stroke="var(--chart-muted)" strokeWidth="1.5" strokeDasharray="4 4" /></svg>
-            inferred call (lower confidence)
+            likely call (inferred)
           </span>
           <span className="inline-flex items-center gap-1.5">
             <svg width="22" height="6" aria-hidden><line x1="0" y1="3" x2="22" y2="3" stroke="var(--status-critical)" strokeWidth="2.5" strokeDasharray="8 4" /></svg>
-            selected taint flow
+            selected attack path
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="h-3 w-5 rounded border border-dashed border-foreground/40" aria-hidden />
-            modified in this push
+            changed in this push
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <FileCode className="size-3" aria-hidden /> dot color = file
+            <FileCode className="size-3" aria-hidden /> dot color = file it lives in
           </span>
           {focusFile && (
             <button
@@ -463,20 +464,20 @@ export function BlastRadiusViewer({
         </div>
 
         {flow && (
-          <section aria-label="Selected flow" className="rounded-xl border bg-card p-4">
+          <section aria-label="Selected attack path" className="card-surface p-4">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-semibold">Flow trace</h3>
+              <h3 className="text-sm font-semibold">Attack path, step by step</h3>
               {flow.rule && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">{flow.rule}</span>
                   </TooltipTrigger>
-                  <TooltipContent>Rule that reported this flow</TooltipContent>
+                  <TooltipContent>Rule that reported this path</TooltipContent>
                 </Tooltip>
               )}
               <span className="text-xs text-muted-foreground">
-                {flow.crossFile ? "Crosses file boundaries" : "Single file"}
-                {flow.tainted ? " · caller-controlled data reaches the sink" : ""}
+                {flow.crossFile ? "Crosses files" : "Within one file"}
+                {flow.tainted ? " · user input reaches the dangerous call" : " · user input does not reach the dangerous call"}
               </span>
             </div>
             <FlowTrace flow={flow} byId={byId} />

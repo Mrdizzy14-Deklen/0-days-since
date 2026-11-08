@@ -20,9 +20,12 @@ With the backend running and the demo team seeded (`backend/seed_demo.py`), open
 
 | Route | What it shows |
 |---|---|
-| `/teams/[slug]` | Stat tiles, leaderboard (composite 0–1000 with Security /700 and Craft /300 bars, pushes vs. faulty, clean streak, most frequent CWE and code smell), score trend chart, live push feed |
-| `/pushes/[id]` | Check result, score movement, AI summary, **cross-file blast-radius viewer** (entry → modified function → sink, selectable taint flows, incident scope of compromised modules), security findings with the skeptic's verdict, code-craft breakdown. This is the Check Run's *Details* link. |
-| `/developers/[id]` | Profile: score history (security + craft stacked to the composite), craft sub-scores, CWE and smell counts, recent pushes |
+| `/teams/[slug]` | Overview: first-visit explainer, team stats, top-3 podium and ranked list (composite 0–1000, Security /700 and Craft /300 bars, pushes vs. faulty, clean streak, rank change over 7 days, most frequent CWE / code smell with fix tips), score-over-time chart with table view, live feed, team's top weaknesses |
+| `/teams/[slug]/pushes` | Every push with result filters, developer filter and search, grouped by day |
+| `/pushes/[id]` | The Check Run's *Details* link. A verdict banner that says what happened in one sentence, then tabs: **Review** (what to fix, where, why and how; dismissed false alarms), **Impact map** (cross-file blast radius: entry point → changed function → dangerous call, selectable attack paths, affected files / incident scope), **Code craft** (sub-scores and quick wins). Auto-refreshes while a scan is running. |
+| `/developers/[id]` | Rank, achievements, a focus-area tip, score breakdown and stacked history, confirmed vulnerabilities, code smells, recent pushes |
+
+"How scoring works" in the header opens a plain-language guide on every page.
 
 ## How it talks to the backend
 

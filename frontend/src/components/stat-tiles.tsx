@@ -1,79 +1,89 @@
-import { GitCommitHorizontal, Network, OctagonX, ShieldCheck, TriangleAlert } from "lucide-react";
+import { Gauge, OctagonX, ShieldCheck, Sparkles } from "lucide-react";
 
-import { cweName, pct } from "@/lib/format";
-import type { TeamStats } from "@/lib/types";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { pct } from "@/lib/format";
+import type { Developer, TeamStats } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 function Tile({
   icon: Icon,
   label,
   value,
+  unit,
   detail,
+  help,
+  tone,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: React.ReactNode;
-  detail?: React.ReactNode;
+  unit?: string;
+  detail: React.ReactNode;
+  help: string;
+  tone: string;
 }) {
   return (
-    <div className="rounded-xl border bg-card p-4">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Icon className="size-3.5" aria-hidden />
-        {label}
-      </div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div>
-      {detail && <div className="mt-1 text-xs text-muted-foreground">{detail}</div>}
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="card-surface flex cursor-default flex-col gap-3 p-4" tabIndex={0}>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className={cn("grid size-7 place-items-center rounded-lg", tone)}>
+              <Icon className="size-4" aria-hidden />
+            </span>
+            {label}
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-3xl font-semibold tracking-tight tabular-nums">{value}</span>
+            {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
+          </div>
+          <div className="text-xs text-muted-foreground">{detail}</div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-60">{help}</TooltipContent>
+    </Tooltip>
   );
 }
 
-export function StatTiles({ stats }: { stats: TeamStats }) {
-  const faultRate = stats.total_pushes ? stats.faulty_pushes / stats.total_pushes : 0;
-  const repo = stats.repositories[0];
-  const graph = stats.repositories.reduce(
-    (acc, r) => ({ files: acc.files + r.files, symbols: acc.symbols + r.symbols, edges: acc.edges + r.edges }),
-    { files: 0, symbols: 0, edges: 0 },
-  );
-  const topCwe = stats.top_cwes[0];
+export function StatTiles({ stats, developers }: { stats: TeamStats; developers: Developer[] }) {
+  const clean = stats.total_pushes - stats.faulty_pushes;
+  const cleanRate = stats.total_pushes ? clean / stats.total_pushes : 1;
+  const avg = developers.length
+    ? Math.round(developers.reduce((s, d) => s + d.composite_score, 0) / developers.length)
+    : null;
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Tile
-        icon={GitCommitHorizontal}
-        label="Pushes scanned"
-        value={stats.total_pushes}
-        detail={`${stats.repositories.length} ${stats.repositories.length === 1 ? "repository" : "repositories"}`}
+        icon={Gauge}
+        label="Team average"
+        value={avg ?? "—"}
+        unit="/1000"
+        detail={`${developers.length} ${developers.length === 1 ? "developer" : "developers"} ranked`}
+        help="The average composite score (security + craft) across everyone on the team."
+        tone="bg-brand-soft text-brand"
       />
       <Tile
-        icon={TriangleAlert}
-        label="Faulty push rate"
-        value={pct(faultRate)}
-        detail={`${stats.faulty_pushes} pushes with verified vulns`}
+        icon={ShieldCheck}
+        label="Clean pushes"
+        value={pct(cleanRate)}
+        detail={`${clean} of ${stats.total_pushes} pushes had no confirmed vulnerability`}
+        help="Share of scanned pushes with no verified security issue."
+        tone="bg-good/12 text-good"
       />
       <Tile
         icon={OctagonX}
         label="Merges blocked"
         value={stats.blocked_merges}
-        detail={topCwe ? `Most common: ${topCwe.cwe}${cweName(topCwe.cwe) ? ` (${cweName(topCwe.cwe)})` : ""}` : "CRITICAL / HIGH findings"}
+        detail="Critical or high issues stopped before merge"
+        help="Pushes whose GitHub check failed because a critical or high-severity vulnerability was confirmed."
+        tone="bg-critical/12 text-critical"
       />
       <Tile
-        icon={ShieldCheck}
-        label="False positives rejected"
+        icon={Sparkles}
+        label="False alarms filtered"
         value={stats.false_positives_rejected}
-        detail="by the adversarial skeptic pass"
-      />
-      <Tile
-        icon={Network}
-        label="Call graph"
-        value={
-          <span className="font-mono text-xl">
-            {graph.symbols}
-            <span className="text-sm text-muted-foreground"> symbols</span>
-          </span>
-        }
-        detail={
-          stats.repositories.length
-            ? `${graph.edges} edges across ${graph.files} files${repo && stats.repositories.length === 1 ? ` · ${repo.full_name}` : ""}`
-            : "No repositories yet"
-        }
+        detail="Dismissed by the AI reviewer, not counted"
+        help="Possible issues the second AI pass proved were safe. They never count against anyone's score."
+        tone="bg-muted text-foreground"
       />
     </div>
   );
